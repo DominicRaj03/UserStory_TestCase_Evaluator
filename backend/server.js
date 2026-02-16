@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const http = require('http');
 const path = require('path');
+const Groq = require('groq-sdk');
 require('dotenv').config();
 
 const app = express();
@@ -26,8 +26,13 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-const MODEL = process.env.MODEL || 'mistral';
-const OLLAMA_URL = 'http://localhost:11434/api/chat';
+const MODEL = process.env.MODEL || 'mixtral-8x7b-32768';
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+// Initialize Groq client
+const groq = new Groq({
+  apiKey: GROQ_API_KEY
+});
 
 // Repair common JSON issues returned by LLM (quotes, trailing commas, unquoted keys, comments, unbalanced braces)
 function repairJsonString(input) {
@@ -179,49 +184,26 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
   `;
 
   try {
-    const result = await new Promise((resolve, reject) => {
-      const payload = JSON.stringify({
-        model: MODEL,
-        messages: [{ role: "user", content: prompt }],
-        stream: false
-      });
-
-      const options = {
-        hostname: 'localhost',
-        port: 11434,
-        path: '/api/chat',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload)
+    const message = await groq.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      messages: [
+        {
+          role: "user",
+          content: prompt
         }
-      };
-
-      const req = http.request(options, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.message.content;
-            resolve(JSON.parse(content));
-          } catch (e) {
-            reject(new Error(`Failed to parse Ollama response: ${e.message}`));
-          }
-        });
-      });
-
-      req.on('error', reject);
-      req.write(payload);
-      req.end();
+      ]
     });
+
+    const content = message.content[0].text;
+    const result = JSON.parse(repairJsonString(content));
 
     console.log(`[${new Date().toISOString()}] Evaluation complete - Score: ${result.totalScore}`);
     res.json(result);
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error:`, error.message);
-    const errorMessage = error.message.includes('connect ECONNREFUSED') 
-      ? 'Ollama service is not running. Please start it with: ollama serve'
+    const errorMessage = error.message.includes('API key')
+      ? 'Groq API key is not configured. Please set GROQ_API_KEY environment variable.'
       : 'Failed to evaluate user story. Please try again later.';
     
     res.status(500).json({ 
@@ -260,42 +242,19 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
   `;
 
   try {
-    const result = await new Promise((resolve, reject) => {
-      const payload = JSON.stringify({
-        model: MODEL,
-        messages: [{ role: "user", content: prompt }],
-        stream: false
-      });
-
-      const options = {
-        hostname: 'localhost',
-        port: 11434,
-        path: '/api/chat',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload)
+    const message = await groq.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      messages: [
+        {
+          role: "user",
+          content: prompt
         }
-      };
-
-      const req = http.request(options, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.message.content;
-            resolve(JSON.parse(content));
-          } catch (e) {
-            reject(new Error(`Failed to parse Ollama response: ${e.message}`));
-          }
-        });
-      });
-
-      req.on('error', reject);
-      req.write(payload);
-      req.end();
+      ]
     });
+
+    const content = message.content[0].text;
+    const result = JSON.parse(repairJsonString(content));
 
     console.log(`[${new Date().toISOString()}] Test case evaluation complete - Score: ${result.totalScore}`);
     
@@ -311,8 +270,8 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
     res.json(responseData);
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error:`, error.message);
-    const errorMessage = error.message.includes('connect ECONNREFUSED') 
-      ? 'Ollama service is not running. Please start it with: ollama serve'
+    const errorMessage = error.message.includes('API key')
+      ? 'Groq API key is not configured. Please set GROQ_API_KEY environment variable.'
       : 'Failed to evaluate test case. Please try again later.';
     
     res.status(500).json({ 
@@ -368,95 +327,21 @@ The JSON must follow this exact schema:
   "summary": "Total test cases generated: X. Coverage: Y%. Key focus areas: Z"
 }`;
 
+
   try {
-    const result = await new Promise((resolve, reject) => {
-      const payload = JSON.stringify({
-        model: MODEL,
-        messages: [{ role: "user", content: prompt }],
-        stream: false
-      });
-
-      const options = {
-        hostname: 'localhost',
-        port: 11434,
-        path: '/api/chat',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload)
+    const message = await groq.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: prompt
         }
-      };
-
-      const req = http.request(options, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            console.log(`[${new Date().toISOString()}] Raw Ollama response:`, data.substring(0, 500));
-            const parsed = JSON.parse(data);
-            const content = parsed.message?.content;
-            if (!content) {
-              reject(new Error(`Invalid Ollama response structure: ${JSON.stringify(parsed).substring(0, 200)}`));
-              return;
-            }
-            if (content.trim().includes('INVALID_JSON_RESPONSE')) {
-              reject(new Error('Model indicated it could not produce valid JSON (INVALID_JSON_RESPONSE)'));
-              return;
-            }
-            // Try to extract JSON from markdown code block first
-            let jsonStr = null;
-            const markdownMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-            if (markdownMatch) {
-              jsonStr = markdownMatch[1].trim();
-            } else {
-              // Fallback: find first JSON object by brace counting
-              const braceIndex = content.indexOf('{');
-              if (braceIndex === -1) {
-                reject(new Error(`No JSON object found in response: ${content.substring(0, 200)}`));
-                return;
-              }
-              let braceCount = 0;
-              let endIndex = braceIndex;
-              for (let i = braceIndex; i < content.length; i++) {
-                if (content[i] === '{') braceCount++;
-                if (content[i] === '}') braceCount--;
-                if (braceCount === 0) {
-                  endIndex = i + 1;
-                  break;
-                }
-              }
-              jsonStr = content.substring(braceIndex, endIndex);
-            }
-            if (!jsonStr) {
-              reject(new Error(`Could not extract JSON from response: ${content.substring(0, 200)}`));
-              return;
-            }
-            try {
-              const result = JSON.parse(jsonStr);
-              console.log(`[${new Date().toISOString()}] Successfully parsed test cases`);
-              resolve(result);
-            } catch (parseErr) {
-              console.warn(`[${new Date().toISOString()}] Initial JSON parse failed: ${parseErr.message}. Attempting repair.`);
-              try {
-                const repaired = repairJsonString(jsonStr);
-                const repairedParsed = JSON.parse(repaired);
-                console.log(`[${new Date().toISOString()}] Successfully parsed test cases after repair`);
-                resolve(repairedParsed);
-              } catch (repairErr) {
-                // As a last resort, include a small second attempt to ask the model to return valid JSON only
-                reject(new Error(`JSON parse error: ${parseErr.message} - Repair error: ${repairErr.message} - Original snippet: ${jsonStr.substring(0, 200)}`));
-              }
-            }
-          } catch (e) {
-            reject(new Error(`Failed to parse Ollama response: ${e.message}`));
-          }
-        });
-      });
-
-      req.on('error', reject);
-      req.write(payload);
-      req.end();
+      ]
     });
+
+    const content = message.content[0].text;
+    const result = JSON.parse(repairJsonString(content));
 
     console.log(`[${new Date().toISOString()}] Test case generation complete`);
     res.json(result);
@@ -465,12 +350,10 @@ The JSON must follow this exact schema:
     
     let errorMessage = 'Failed to generate test cases. Please try again later.';
     
-    if (error.message.includes('ECONNREFUSED')) {
-      errorMessage = 'Ollama service is not running. Please start it with: ollama serve';
+    if (error.message.includes('API key')) {
+      errorMessage = 'Groq API key is not configured. Please set GROQ_API_KEY environment variable.';
     } else if (error.message.includes('No JSON found')) {
       errorMessage = `${error.message}. The model may not be returning valid JSON.`;
-    } else if (error.message.includes('Invalid Ollama response')) {
-      errorMessage = `Invalid response from Ollama. ${error.message}`;
     }
     
     res.status(500).json({ 
@@ -523,116 +406,26 @@ Return the response in this exact JSON format:
 Generate 5-8 test cases covering various scenarios based on the mockup description.`;
 
   try {
-    const result = await new Promise((resolve, reject) => {
-      const payload = JSON.stringify({
-        model: MODEL,
-        messages: [{ role: "user", content: prompt }],
-        stream: false
-      });
-
-      const options = {
-        hostname: 'localhost',
-        port: 11434,
-        path: '/api/chat',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload)
+    const message = await groq.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: prompt
         }
-      };
-
-      const req = http.request(options, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.message?.content;
-            
-            if (!content) {
-              console.error('Invalid Ollama response structure:', data);
-              reject(new Error('Ollama returned invalid response structure'));
-              return;
-            }
-
-            console.log(`[${new Date().toISOString()}] Ollama response received, parsing...`);
-            
-            // Try to extract JSON from response
-            let jsonStr = content.trim();
-            
-            // Remove markdown code blocks if present
-            const markdownMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-            if (markdownMatch) {
-              console.log('Found JSON in markdown block');
-              jsonStr = markdownMatch[1].trim();
-            } else {
-              // Find JSON object in response
-              const braceIndex = jsonStr.indexOf('{');
-              if (braceIndex === -1) {
-                console.error('No JSON object found in response:', jsonStr.substring(0, 500));
-                reject(new Error('No JSON found in Ollama response'));
-                return;
-              }
-              
-              // Extract complete JSON object
-              let braceCount = 0;
-              let endIndex = braceIndex;
-              for (let i = braceIndex; i < jsonStr.length; i++) {
-                if (jsonStr[i] === '{') braceCount++;
-                if (jsonStr[i] === '}') braceCount--;
-                if (braceCount === 0) {
-                  endIndex = i + 1;
-                  break;
-                }
-              }
-              jsonStr = jsonStr.substring(braceIndex, endIndex);
-            }
-            
-            try {
-              console.log('Attempting to parse JSON...');
-              const result = JSON.parse(jsonStr);
-              
-              // Validate response structure
-              if (!result.testCases || !Array.isArray(result.testCases)) {
-                throw new Error('Response missing or invalid testCases array');
-              }
-              
-              console.log(`[${new Date().toISOString()}] Successfully generated ${result.testCases.length} test cases from image description`);
-              resolve(result);
-            } catch (parseErr) {
-              console.log('Parse failed, attempting JSON repair...');
-              try {
-                const repaired = repairJsonString(jsonStr);
-                const repairedParsed = JSON.parse(repaired);
-                
-                if (!repairedParsed.testCases || !Array.isArray(repairedParsed.testCases)) {
-                  throw new Error('Repaired JSON missing testCases array');
-                }
-                
-                console.log(`[${new Date().toISOString()}] Successfully parsed after repair`);
-                resolve(repairedParsed);
-              } catch (repairErr) {
-                console.error('JSON repair failed:', repairErr.message);
-                console.error('Original JSON string:', jsonStr.substring(0, 300));
-                reject(new Error(`Failed to parse JSON: ${parseErr.message}`));
-              }
-            }
-          } catch (e) {
-            console.error('Response processing error:', e.message);
-            reject(new Error(`Failed to process response: ${e.message}`));
-          }
-        });
-      });
-
-      req.on('error', (err) => {
-        console.error('HTTP request error:', err.message);
-        reject(err);
-      });
-      
-      req.write(payload);
-      req.end();
+      ]
     });
 
+    const content = message.content[0].text;
+    const result = JSON.parse(repairJsonString(content));
+
+    // Validate response structure
+    if (!result.testCases || !Array.isArray(result.testCases)) {
+      throw new Error('Response missing or invalid testCases array');
+    }
+
+    console.log(`[${new Date().toISOString()}] Successfully generated ${result.testCases.length} test cases from image description`);
     res.json(result);
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error in /generate-test-cases-from-image:`, error.message);
@@ -640,10 +433,10 @@ Generate 5-8 test cases covering various scenarios based on the mockup descripti
     let errorMessage = 'Failed to generate test cases from mockup. Please provide a clearer description.';
     let statusCode = 500;
     
-    if (error.message.includes('ECONNREFUSED')) {
-      errorMessage = 'Ollama service is not running. Please start it with: ollama serve';
+    if (error.message.includes('API key')) {
+      errorMessage = 'Groq API key is not configured. Please set GROQ_API_KEY environment variable.';
     } else if (error.message.includes('ETIMEDOUT')) {
-      errorMessage = 'Request timed out. Ollama server may be overloaded.';
+      errorMessage = 'Request timed out. The service may be overloaded.';
     } else if (error.message.includes('No JSON found')) {
       errorMessage = 'Model did not return valid test cases. Please try with a more detailed mockup description.';
     } else if (error.message.includes('parse')) {
