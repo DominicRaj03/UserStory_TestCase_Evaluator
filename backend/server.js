@@ -237,11 +237,20 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
       errorMessage = 'Rate limit exceeded. Please try again in a moment.';
     } else if (error.message.includes('JSON')) {
       errorMessage = 'Failed to parse API response. Model may not have returned valid JSON.';
+    } else if (error.message.includes('model') || error.message.includes('Model')) {
+      errorMessage = `Model error: ${error.message}. Check if model '${MODEL}' is available.`;
+    } else if (error.status === 429) {
+      errorMessage = 'Rate limit exceeded. Groq API quota may be full.';
+    } else if (error.status === 401 || error.status === 403) {
+      errorMessage = 'API authentication failed. Groq API key may be invalid.';
     }
     
     res.status(500).json({ 
       error: errorMessage,
-      details: error.message
+      details: error.message,
+      errorType: error.type || error.constructor.name,
+      model: MODEL,
+      timestamp: new Date().toISOString()
     });
   }
 });
@@ -323,6 +332,48 @@ app.get('/health', (req, res) => {
     apiKeyConfigured: apiKeyConfigured,
     environment: process.env.NODE_ENV || 'development'
   });
+});
+
+// Test Groq connection endpoint (for debugging)
+app.get('/test-groq', async (req, res) => {
+  console.log(`[${new Date().toISOString()}] Testing Groq connection...`);
+  
+  try {
+    const message = await groq.messages.create({
+      model: MODEL,
+      max_tokens: 100,
+      messages: [
+        {
+          role: "user",
+          content: "Say 'Groq API is working' and nothing else."
+        }
+      ]
+    });
+
+    const response = {
+      success: true,
+      model: MODEL,
+      message: message.content[0].text,
+      timestamp: new Date().toISOString()
+    };
+
+    console.log(`[${new Date().toISOString()}] ✅ Groq test successful:`, response.message);
+    res.json(response);
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] ❌ Groq test failed:`, error.message);
+    console.error(`Error type:`, error.type);
+    console.error(`Error status:`, error.status);
+    
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      type: error.type,
+      status: error.status,
+      hasApiKey: !!GROQ_API_KEY,
+      apiKeyLength: GROQ_API_KEY ? GROQ_API_KEY.length : 0,
+      model: MODEL
+    });
+  }
 });
 
 // Test case generation endpoint
