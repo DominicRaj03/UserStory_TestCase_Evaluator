@@ -1,7 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const Groq = require('groq-sdk');
+
+// Import Groq SDK - handle both CommonJS and ESM exports
+let Groq;
+try {
+  const groqModule = require('groq-sdk');
+  Groq = groqModule.default || groqModule;
+} catch (err) {
+  console.error('Failed to import Groq SDK:', err.message);
+}
+
 require('dotenv').config();
 
 const app = express();
@@ -20,7 +29,8 @@ app.get('/', (req, res) => {
       evaluate: 'POST /evaluate',
       evaluateTestCase: 'POST /evaluate-test-case',
       generateTestCases: 'POST /generate-test-cases',
-      generateTestCasesFromImage: 'POST /generate-test-cases-from-image'
+      generateTestCasesFromImage: 'POST /generate-test-cases-from-image',
+      testGroq: 'GET /test-groq'
     }
   });
 });
@@ -36,13 +46,20 @@ if (!GROQ_API_KEY || GROQ_API_KEY.trim() === '') {
 }
 
 // Initialize Groq client
-const groq = new Groq({
-  apiKey: GROQ_API_KEY
-});
+let groq = null;
+try {
+  groq = new Groq({
+    apiKey: GROQ_API_KEY
+  });
+  console.log(`[${new Date().toISOString()}] ✅ Groq SDK initialized successfully`);
+} catch (err) {
+  console.error(`[${new Date().toISOString()}] ❌ Failed to initialize Groq SDK:`, err.message);
+}
 
 console.log(`[${new Date().toISOString()}] Server starting...`);
 console.log(`[${new Date().toISOString()}] Model: ${MODEL}`);
 console.log(`[${new Date().toISOString()}] API Key configured: ${!!GROQ_API_KEY}`);
+console.log(`[${new Date().toISOString()}] Groq client ready: ${!!groq}`);
 
 // Repair common JSON issues returned by LLM (quotes, trailing commas, unquoted keys, comments, unbalanced braces)
 function repairJsonString(input) {
@@ -165,6 +182,14 @@ function calculateHealthMetrics(parameters) {
 app.post('/evaluate', validateUserStory, async (req, res) => {
   const { userStory } = req.body;
   console.log(`[${new Date().toISOString()}] Evaluating user story of ${userStory.length} characters`);
+
+  // Guard: Check if Groq is initialized
+  if (!groq) {
+    return res.status(500).json({
+      error: 'Groq API is not properly initialized',
+      message: 'The server needs to be restarted. Contact administrator.'
+    });
+  }
 
   const prompt = `
     Analyze this User Story: "${userStory}"
@@ -337,6 +362,15 @@ app.get('/health', (req, res) => {
 // Test Groq connection endpoint (for debugging)
 app.get('/test-groq', async (req, res) => {
   console.log(`[${new Date().toISOString()}] Testing Groq connection...`);
+  
+  if (!groq) {
+    return res.status(500).json({
+      success: false,
+      error: 'Groq SDK is not initialized',
+      apiKeyConfigured: !!GROQ_API_KEY,
+      reason: 'Failed to initialize Groq client on server startup'
+    });
+  }
   
   try {
     const message = await groq.messages.create({
