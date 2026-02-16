@@ -205,30 +205,43 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
       ]
     });
 
+    console.log(`[${new Date().toISOString()}] Groq API response received`);
+    
+    if (!message.content || !message.content[0]) {
+      throw new Error('Invalid response structure from Groq API');
+    }
+    
     const content = message.content[0].text;
-    const result = JSON.parse(repairJsonString(content));
+    console.log(`[${new Date().toISOString()}] Response content (first 500 chars):`, content.substring(0, 500));
+    
+    const repaired = repairJsonString(content);
+    console.log(`[${new Date().toISOString()}] Repaired JSON (first 500 chars):`, repaired.substring(0, 500));
+    
+    const result = JSON.parse(repaired);
 
     console.log(`[${new Date().toISOString()}] Evaluation complete - Score: ${result.totalScore}`);
     res.json(result);
   } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error in /evaluate:`, error.message);
-    console.error(`[${new Date().toISOString()}] Full error:`, error);
+    console.error(`[${new Date().toISOString()}] ❌ Error in /evaluate:`, error.message);
+    console.error(`[${new Date().toISOString()}] Error stack:`, error.stack);
     
     let errorMessage = 'Failed to evaluate user story. Please try again later.';
     
     if (!GROQ_API_KEY || GROQ_API_KEY.trim() === '') {
-      errorMessage = 'GROQ_API_KEY is not configured on the server. Please contact administrator.';
+      errorMessage = 'GROQ_API_KEY is not configured on the server.';
     } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-      errorMessage = 'Groq API key is invalid or expired. Please check your API key.';
+      errorMessage = 'Groq API key is invalid or expired.';
     } else if (error.message.includes('API key')) {
-      errorMessage = 'Groq API key error. Please verify GROQ_API_KEY is set correctly.';
+      errorMessage = 'Groq API key error. Verify GROQ_API_KEY is set correctly.';
     } else if (error.message.includes('rate limit')) {
       errorMessage = 'Rate limit exceeded. Please try again in a moment.';
+    } else if (error.message.includes('JSON')) {
+      errorMessage = 'Failed to parse API response. Model may not have returned valid JSON.';
     }
     
     res.status(500).json({ 
       error: errorMessage,
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: error.message
     });
   }
 });
