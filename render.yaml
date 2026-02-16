@@ -1,1 +1,13 @@
-web: cd backend && npm start
+services:
+  - type: web
+    name: evalutor
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
