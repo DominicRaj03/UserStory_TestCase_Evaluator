@@ -29,10 +29,20 @@ const PORT = process.env.PORT || 5000;
 const MODEL = process.env.MODEL || 'mixtral-8x7b-32768';
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
+// Check if API key is configured
+if (!GROQ_API_KEY || GROQ_API_KEY.trim() === '') {
+  console.error('ERROR: GROQ_API_KEY environment variable is not set!');
+  console.error('Please set GROQ_API_KEY in your environment or .env file');
+}
+
 // Initialize Groq client
 const groq = new Groq({
   apiKey: GROQ_API_KEY
 });
+
+console.log(`[${new Date().toISOString()}] Server starting...`);
+console.log(`[${new Date().toISOString()}] Model: ${MODEL}`);
+console.log(`[${new Date().toISOString()}] API Key configured: ${!!GROQ_API_KEY}`);
 
 // Repair common JSON issues returned by LLM (quotes, trailing commas, unquoted keys, comments, unbalanced braces)
 function repairJsonString(input) {
@@ -201,10 +211,20 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
     console.log(`[${new Date().toISOString()}] Evaluation complete - Score: ${result.totalScore}`);
     res.json(result);
   } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error:`, error.message);
-    const errorMessage = error.message.includes('API key')
-      ? 'Groq API key is not configured. Please set GROQ_API_KEY environment variable.'
-      : 'Failed to evaluate user story. Please try again later.';
+    console.error(`[${new Date().toISOString()}] Error in /evaluate:`, error.message);
+    console.error(`[${new Date().toISOString()}] Full error:`, error);
+    
+    let errorMessage = 'Failed to evaluate user story. Please try again later.';
+    
+    if (!GROQ_API_KEY || GROQ_API_KEY.trim() === '') {
+      errorMessage = 'GROQ_API_KEY is not configured on the server. Please contact administrator.';
+    } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+      errorMessage = 'Groq API key is invalid or expired. Please check your API key.';
+    } else if (error.message.includes('API key')) {
+      errorMessage = 'Groq API key error. Please verify GROQ_API_KEY is set correctly.';
+    } else if (error.message.includes('rate limit')) {
+      errorMessage = 'Rate limit exceeded. Please try again in a moment.';
+    }
     
     res.status(500).json({ 
       error: errorMessage,
@@ -283,7 +303,13 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', model: MODEL });
+  const apiKeyConfigured = !!GROQ_API_KEY && GROQ_API_KEY.trim() !== '';
+  res.json({ 
+    status: 'OK', 
+    model: MODEL,
+    apiKeyConfigured: apiKeyConfigured,
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
 // Test case generation endpoint
