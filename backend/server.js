@@ -1,11 +1,29 @@
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// Serve static files from frontend build
+app.use(express.static(path.join(__dirname, '../frontend/build')));
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'US Evaluator API is running',
+    endpoints: {
+      health: '/health',
+      evaluate: 'POST /evaluate',
+      evaluateTestCase: 'POST /evaluate-test-case',
+      generateTestCases: 'POST /generate-test-cases',
+      generateTestCasesFromImage: 'POST /generate-test-cases-from-image'
+    }
+  });
+});
 
 const PORT = process.env.PORT || 5000;
 const MODEL = process.env.MODEL || 'mistral';
