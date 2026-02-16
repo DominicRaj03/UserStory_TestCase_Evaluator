@@ -6,9 +6,12 @@ const path = require('path');
 let Groq;
 try {
   const groqModule = require('groq-sdk');
+  console.log(`[${new Date().toISOString()}] Groq module loaded:`, Object.keys(groqModule).slice(0, 5));
   Groq = groqModule.default || groqModule;
+  console.log(`[${new Date().toISOString()}] Groq constructor type:`, typeof Groq);
 } catch (err) {
   console.error('Failed to import Groq SDK:', err.message);
+  console.error('Stack:', err.stack);
 }
 
 require('dotenv').config();
@@ -48,12 +51,27 @@ if (!GROQ_API_KEY || GROQ_API_KEY.trim() === '') {
 // Initialize Groq client
 let groq = null;
 try {
+  if (!Groq) {
+    throw new Error('Groq SDK not loaded - check import above');
+  }
+  
+  console.log(`[${new Date().toISOString()}] Initializing Groq with API key length: ${GROQ_API_KEY?.length || 0}`);
+  
   groq = new Groq({
     apiKey: GROQ_API_KEY
   });
+  
   console.log(`[${new Date().toISOString()}] ✅ Groq SDK initialized successfully`);
+  console.log(`[${new Date().toISOString()}] Groq instance type:`, groq.constructor.name);
+  console.log(`[${new Date().toISOString()}] Groq.messages exists:`, !!groq.messages);
+  console.log(`[${new Date().toISOString()}] Groq.messages.create exists:`, typeof groq.messages?.create);
 } catch (err) {
   console.error(`[${new Date().toISOString()}] ❌ Failed to initialize Groq SDK:`, err.message);
+  console.error(`Error details:`, {
+    name: err.name,
+    message: err.message,
+    stack: err.stack?.split('\n').slice(0, 3)
+  });
 }
 
 console.log(`[${new Date().toISOString()}] Server starting...`);
@@ -368,7 +386,21 @@ app.get('/test-groq', async (req, res) => {
       success: false,
       error: 'Groq SDK is not initialized',
       apiKeyConfigured: !!GROQ_API_KEY,
-      reason: 'Failed to initialize Groq client on server startup'
+      apiKeyLength: GROQ_API_KEY?.length || 0,
+      reason: 'Failed to initialize Groq client on server startup',
+      groqType: typeof Groq,
+      groqExists: !!Groq
+    });
+  }
+  
+  if (!groq.messages || typeof groq.messages.create !== 'function') {
+    return res.status(500).json({
+      success: false,
+      error: 'Groq.messages.create is not available',
+      groqType: groq.constructor.name,
+      hasMessages: !!groq.messages,
+      messagesType: typeof groq.messages,
+      hasCreate: groq.messages ? typeof groq.messages.create : 'messages is undefined'
     });
   }
   
@@ -395,17 +427,24 @@ app.get('/test-groq', async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error(`[${new Date().toISOString()}] ❌ Groq test failed:`, error.message);
-    console.error(`Error type:`, error.type);
-    console.error(`Error status:`, error.status);
+    console.error(`Error details:`, {
+      type: error.type,
+      status: error.status,
+      code: error.code,
+      name: error.name,
+      stack: error.stack?.split('\n').slice(0, 3)
+    });
     
     res.status(500).json({
       success: false,
       error: error.message,
-      type: error.type,
-      status: error.status,
+      type: error.type || error.name,
+      status: error.status || 500,
+      code: error.code,
       hasApiKey: !!GROQ_API_KEY,
       apiKeyLength: GROQ_API_KEY ? GROQ_API_KEY.length : 0,
-      model: MODEL
+      model: MODEL,
+      failedAt: 'groq.messages.create'
     });
   }
 });
