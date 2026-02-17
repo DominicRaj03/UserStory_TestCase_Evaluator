@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { repairJsonString } = require('./jsonRepair');
 
 // Import Groq SDK - handle both CommonJS and ESM exports
 let Groq;
@@ -63,8 +64,8 @@ try {
   
   console.log(`[${new Date().toISOString()}] ✅ Groq SDK initialized successfully`);
   console.log(`[${new Date().toISOString()}] Groq instance type:`, groq.constructor.name);
-  console.log(`[${new Date().toISOString()}] Groq.messages exists:`, !!groq.messages);
-  console.log(`[${new Date().toISOString()}] Groq.messages.create exists:`, typeof groq.messages?.create);
+  console.log(`[${new Date().toISOString()}] Groq.chat exists:`, !!groq.chat);
+  console.log(`[${new Date().toISOString()}] Groq.chat.completions.create exists:`, typeof groq.chat?.completions?.create);
 } catch (err) {
   console.error(`[${new Date().toISOString()}] ❌ Failed to initialize Groq SDK:`, err.message);
   console.error(`Error details:`, {
@@ -80,53 +81,6 @@ console.log(`[${new Date().toISOString()}] API Key configured: ${!!GROQ_API_KEY}
 console.log(`[${new Date().toISOString()}] Groq client ready: ${!!groq}`);
 
 // Repair common JSON issues returned by LLM (quotes, trailing commas, unquoted keys, comments, unbalanced braces)
-function repairJsonString(input) {
-  if (!input || typeof input !== 'string') return input;
-  let s = input.trim();
-
-  // Trim surrounding non-json text
-  const firstBrace = s.indexOf('{');
-  const lastBrace = s.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace !== -1) {
-    s = s.substring(firstBrace, lastBrace + 1);
-  }
-
-  // Replace smart quotes with standard quotes
-  s = s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
-
-  // Remove JS/C-style comments
-  s = s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-
-  // Replace single quoted strings with double quotes
-  s = s.replace(/'([^']*)'/g, '"$1"');
-
-  // Ensure property names are quoted: { key: becomes { "key":
-  s = s.replace(/([{,\s])(\w+)\s*:/g, '$1"$2":');
-
-  // Remove trailing commas before object/array closers
-  s = s.replace(/,\s*([}\]])/g, '$1');
-
-  // Remove any leading/trailing ellipses or stray characters
-  s = s.replace(/^[^\{\[]+/, '').replace(/[^\}\]]+$/, '');
-
-  // Balance braces by appending closing braces if needed
-  const openBraces = (s.match(/\{/g) || []).length;
-  const closeBraces = (s.match(/\}/g) || []).length;
-  if (openBraces > closeBraces) {
-    s += '}'.repeat(openBraces - closeBraces);
-  }
-  if (closeBraces > openBraces) {
-    // Try to remove extra closing braces at the end
-    while ((s.match(/\{/g) || []).length < (s.match(/\}/g) || []).length) {
-      s = s.replace(/\}\s*$/, '');
-    }
-  }
-
-  return s;
-}
-
-
-// Input validation middleware
 const validateUserStory = (req, res, next) => {
   const { userStory } = req.body;
   
@@ -237,7 +191,7 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
   `;
 
   try {
-    const message = await groq.messages.create({
+    const message = await groq.chat.completions.create({
       model: MODEL,
       max_tokens: 2048,
       messages: [
@@ -250,11 +204,11 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
 
     console.log(`[${new Date().toISOString()}] Groq API response received`);
     
-    if (!message.content || !message.content[0]) {
+    if (!message.choices || !message.choices[0]) {
       throw new Error('Invalid response structure from Groq API');
     }
     
-    const content = message.content[0].text;
+    const content = message.choices[0].message.content;
     console.log(`[${new Date().toISOString()}] Response content (first 500 chars):`, content.substring(0, 500));
     
     const repaired = repairJsonString(content);
@@ -327,7 +281,7 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
   `;
 
   try {
-    const message = await groq.messages.create({
+    const message = await groq.chat.completions.create({
       model: MODEL,
       max_tokens: 2048,
       messages: [
@@ -338,7 +292,7 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
       ]
     });
 
-    const content = message.content[0].text;
+    const content = message.choices[0].message.content;
     const result = JSON.parse(repairJsonString(content));
 
     console.log(`[${new Date().toISOString()}] Test case evaluation complete - Score: ${result.totalScore}`);
@@ -393,19 +347,19 @@ app.get('/test-groq', async (req, res) => {
     });
   }
   
-  if (!groq.messages || typeof groq.messages.create !== 'function') {
+  if (!groq || typeof groq.chat?.completions?.create !== 'function') {
     return res.status(500).json({
       success: false,
-      error: 'Groq.messages.create is not available',
+      error: 'Groq.chat.completions.create is not available',
       groqType: groq.constructor.name,
-      hasMessages: !!groq.messages,
-      messagesType: typeof groq.messages,
-      hasCreate: groq.messages ? typeof groq.messages.create : 'messages is undefined'
+      hasChat: !!groq.chat,
+      hasCompletions: !!groq.chat?.completions,
+      hasCreate: groq.chat?.completions ? typeof groq.chat.completions.create : 'chat.completions is undefined'
     });
   }
   
   try {
-    const message = await groq.messages.create({
+    const message = await groq.chat.completions.create({
       model: MODEL,
       max_tokens: 100,
       messages: [
@@ -444,7 +398,7 @@ app.get('/test-groq', async (req, res) => {
       hasApiKey: !!GROQ_API_KEY,
       apiKeyLength: GROQ_API_KEY ? GROQ_API_KEY.length : 0,
       model: MODEL,
-      failedAt: 'groq.messages.create'
+      failedAt: 'groq.chat.completions.create'
     });
   }
 });
@@ -458,41 +412,28 @@ app.post('/generate-test-cases', async (req, res) => {
     return res.status(400).json({ error: 'Feature description must be at least 5 characters' });
   }
 
-  const prompt = `Generate comprehensive test cases for the following feature/functionality: "${feature}".
+  const prompt = `You are a professional QA test case generator. Generate comprehensive test cases for this feature:
 
-You MUST return EXACTLY one pure JSON object and NOTHING else (no markdown, no explanations, no code fences). If you are unable to produce valid JSON, respond with the exact token: INVALID_JSON_RESPONSE
+"${feature}"
 
-The JSON must follow this exact schema:
+CRITICAL: You must respond with ONLY a valid JSON object (no markdown, no explanations, no preamble). The JSON structure must be exactly:
+
 {
   "testCases": [
-    {
-      "category": "Positive Test Cases",
-      "cases": [
-        {
-          "name": "Test case name",
-          "description": "Brief description",
-          "precondition": "Precondition/Setup",
-          "testData": "Input data to use",
-          "steps": ["Step 1", "Step 2", "Step 3"],
-          "expectedResult": "Expected outcome",
-          "riskLevel": "Low"
-        }
-      ]
-    },
-    { "category": "Negative Test Cases", "cases": [] },
-    { "category": "Boundary Value Analysis", "cases": [] },
-    { "category": "Coverage Analysis", "cases": [] }
+    {"category": "Positive Test Cases", "cases": [{"name": "", "description": "", "precondition": "", "testData": "", "steps": [], "expectedResult": "", "riskLevel": "Low"}]},
+    {"category": "Negative Test Cases", "cases": []},
+    {"category": "Boundary Value Analysis", "cases": []},
+    {"category": "Coverage Analysis", "cases": []}
   ],
-  "testData": [
-    { "field": "Field name", "validData": "Valid example", "invalidData": "Invalid example", "expectedBehavior": "Accept/Reject", "errorMessage": "Error message if applicable" }
-  ],
-  "errorHandling": ["Network failures", "Invalid inputs", "Expired sessions", "Timeouts", "DB connection issues"],
-  "summary": "Total test cases generated: X. Coverage: Y%. Key focus areas: Z"
-}`;
+  "testData": [{"field": "", "validData": "", "invalidData": "", "expectedBehavior": "", "errorMessage": ""}],
+  "errorHandling": [],
+  "summary": ""
+}
 
+Generate at least 3 positive test cases and populate ALL categories. Return ONLY the JSON, starting with { and ending with }`;
 
   try {
-    const message = await groq.messages.create({
+    const message = await groq.chat.completions.create({
       model: MODEL,
       max_tokens: 4096,
       messages: [
@@ -503,20 +444,35 @@ The JSON must follow this exact schema:
       ]
     });
 
-    const content = message.content[0].text;
-    const result = JSON.parse(repairJsonString(content));
+    const content = message.choices[0].message.content;
+    console.log(`[${new Date().toISOString()}] Raw LLM response (first 500 chars): ${content.substring(0, 500)}...`);
+    
+    let repaired;
+    try {
+      repaired = repairJsonString(content);
+    } catch (repairError) {
+      console.error(`[${new Date().toISOString()}] JSON repair error:`, repairError.message);
+      console.error(`[${new Date().toISOString()}] Raw content length: ${content.length}`);
+      throw repairError;
+    }
+    
+    console.log(`[${new Date().toISOString()}] Attempting to parse repaired JSON (length: ${repaired.length})`);
+    const result = JSON.parse(repaired);
 
     console.log(`[${new Date().toISOString()}] Test case generation complete`);
     res.json(result);
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error:`, error.message);
-    
+    if (error.stack) {
+      console.error(error.stack);
+    }
     let errorMessage = 'Failed to generate test cases. Please try again later.';
-    
     if (error.message.includes('API key')) {
       errorMessage = 'Groq API key is not configured. Please set GROQ_API_KEY environment variable.';
     } else if (error.message.includes('No JSON found')) {
       errorMessage = `${error.message}. The model may not be returning valid JSON.`;
+    } else if (error.message.includes('Unexpected token')) {
+      errorMessage = 'Invalid JSON format returned from AI model. Try again.';
     }
     
     res.status(500).json({ 
@@ -569,7 +525,7 @@ Return the response in this exact JSON format:
 Generate 5-8 test cases covering various scenarios based on the mockup description.`;
 
   try {
-    const message = await groq.messages.create({
+    const message = await groq.chat.completions.create({
       model: MODEL,
       max_tokens: 4096,
       messages: [
@@ -580,7 +536,7 @@ Generate 5-8 test cases covering various scenarios based on the mockup descripti
       ]
     });
 
-    const content = message.content[0].text;
+    const content = message.choices[0].message.content;
     const result = JSON.parse(repairJsonString(content));
 
     // Validate response structure
