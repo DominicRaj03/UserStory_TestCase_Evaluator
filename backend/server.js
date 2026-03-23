@@ -410,6 +410,70 @@ app.get('/test-groq', async (req, res) => {
   }
 });
 
+// User story generation endpoint
+app.post('/generate-user-stories', async (req, res) => {
+  const { feature } = req.body;
+  console.log(`[${new Date().toISOString()}] Generating user stories for epic/feature of ${feature?.length || 0} characters`);
+
+  if (!feature || feature.trim().length < 5) {
+    return res.status(400).json({ error: 'Feature description must be at least 5 characters' });
+  }
+
+  const prompt = `You are an expert Agile Product Owner. Break down this feature/epic into smaller, highly actionable User Stories:
+
+FEATURE DESCRIPTION:
+"${feature}"
+
+CRITICAL: You must respond with ONLY a valid JSON object in the exact structure below. Do not use markdown blocks:
+{
+  "summary": "Brief summary of the feature breakdown strategy",
+  "userStories": [
+    {
+      "name": "Short descriptive title",
+      "description": "As a [type of user], I want [some goal] so that [some reason]",
+      "acceptanceCriteria": ["AC 1", "AC 2"],
+      "storyPoints": 3
+    }
+  ]
+}
+
+Ensure you generate at least 3 distinct user stories. Return ONLY the raw JSON object.`;
+
+  try {
+    const message = await groq.chat.completions.create({
+      model: MODEL,
+      response_format: { type: "json_object" },
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: prompt
+        }
+      ]
+    });
+
+    const content = message.choices[0].message.content;
+    const result = JSON.parse(repairJsonString(content));
+
+    console.log(`[${new Date().toISOString()}] User story generation complete`);
+    res.json(result);
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in /generate-user-stories:`, error.message);
+    
+    let errorMessage = 'Failed to generate user stories. Please try again later.';
+    if (error.message.includes('API key')) {
+      errorMessage = 'Groq API key is not configured.';
+    } else if (error.message.includes('JSON')) {
+      errorMessage = 'Model did not return valid JSON. Try again.';
+    }
+    
+    res.status(500).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // Test case generation endpoint
 app.post('/generate-test-cases', async (req, res) => {
   const { feature } = req.body;
