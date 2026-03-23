@@ -193,6 +193,7 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
   try {
     const message = await groq.chat.completions.create({
       model: MODEL,
+      response_format: { type: "json_object" },
       max_tokens: 2048,
       messages: [
         {
@@ -247,6 +248,7 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
       details: error.message,
       errorType: error.type || error.constructor.name,
       model: MODEL,
+      response_format: { type: "json_object" },
       timestamp: new Date().toISOString()
     });
   }
@@ -283,6 +285,7 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
   try {
     const message = await groq.chat.completions.create({
       model: MODEL,
+      response_format: { type: "json_object" },
       max_tokens: 2048,
       messages: [
         {
@@ -326,6 +329,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     model: MODEL,
+      response_format: { type: "json_object" },
     apiKeyConfigured: apiKeyConfigured,
     environment: process.env.NODE_ENV || 'development'
   });
@@ -361,6 +365,7 @@ app.get('/test-groq', async (req, res) => {
   try {
     const message = await groq.chat.completions.create({
       model: MODEL,
+      response_format: { type: "json_object" },
       max_tokens: 100,
       messages: [
         {
@@ -373,6 +378,7 @@ app.get('/test-groq', async (req, res) => {
     const response = {
       success: true,
       model: MODEL,
+      response_format: { type: "json_object" },
       message: message.content[0].text,
       timestamp: new Date().toISOString()
     };
@@ -398,6 +404,7 @@ app.get('/test-groq', async (req, res) => {
       hasApiKey: !!GROQ_API_KEY,
       apiKeyLength: GROQ_API_KEY ? GROQ_API_KEY.length : 0,
       model: MODEL,
+      response_format: { type: "json_object" },
       failedAt: 'groq.chat.completions.create'
     });
   }
@@ -435,6 +442,7 @@ Generate at least 3 positive test cases and populate ALL categories. Return ONLY
   try {
     const message = await groq.chat.completions.create({
       model: MODEL,
+      response_format: { type: "json_object" },
       max_tokens: 4096,
       messages: [
         {
@@ -527,6 +535,7 @@ Generate 5-8 test cases covering various scenarios based on the mockup descripti
   try {
     const message = await groq.chat.completions.create({
       model: MODEL,
+      response_format: { type: "json_object" },
       max_tokens: 4096,
       messages: [
         {
