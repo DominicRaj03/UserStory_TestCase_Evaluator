@@ -887,9 +887,20 @@ app.post('/integration/azure/work-items', async (req, res) => {
   }
 });
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    env: process.env.NODE_ENV || 'development',
+    model: MODEL,
+    groq: !!groq
+  });
+});
+
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ error: 'Endpoint not found' });
+  res.status(404).json({ error: `Endpoint ${req.url} not found` });
 });
 
 if (process.env.NODE_ENV !== 'production') {
