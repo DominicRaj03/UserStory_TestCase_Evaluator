@@ -1,5 +1,5 @@
-const { v4: uuidv4 } = require('uuid');
-
+const crypto = require('crypto');
+function uuidv4() { return crypto.randomUUID(); }
 async function logTrace(name, inputText, outputData, scores = null) {
   const secretKey = process.env.LANGFUSE_SECRET_KEY;
   const publicKey = process.env.LANGFUSE_PUBLIC_KEY;
