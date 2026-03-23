@@ -40,7 +40,7 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-const MODEL = process.env.MODEL || 'llama3-8b-8192';
+const MODEL = process.env.MODEL || 'llama-3.1-8b-instant';
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 // Check if API key is configured
