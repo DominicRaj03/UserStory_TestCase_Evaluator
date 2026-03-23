@@ -18,7 +18,7 @@ from json_repair import repair_json_string
 from groq_client import chat_completion
 from rag_engine import build_index, retrieve, format_rag_context
 from deepeval_metrics import run_deepeval_metrics
-from observability import log_trace, get_langfuse
+from observability import log_trace
 
 load_dotenv()
 
