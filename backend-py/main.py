@@ -35,11 +35,19 @@ MODEL = os.getenv("MODEL", "llama-3.1-8b-instant")
 async def lifespan(app: FastAPI):
     logger.info("🚀 QA Evaluator API starting...")
     logger.info(f"📊 Model: {MODEL}")
-    # Init Langfuse connection early
-    get_langfuse()
-    logger.info("🔍 Building RAG index from knowledge base...")
-    await build_index()
-    logger.info("✅ Ready.")
+    logger.info("🔍 Initiating background RAG index building and model warmup...")
+    # Run the index building as a background task so we don't block server startup (which causes 60s+ hangs on Render)
+    import asyncio
+    
+    async def warmup_and_build():
+        from groq_client import get_embedding
+        logger.info("⚡ Pre-warming PyTorch sentence-transformers model...")
+        await get_embedding("warmup")
+        logger.info("⚡ Model warmed up in memory.")
+        await build_index()
+        
+    asyncio.create_task(warmup_and_build())
+    logger.info("✅ Ready. Server is accepting connections.")
     yield
     logger.info("👋 Shutting down.")
 
