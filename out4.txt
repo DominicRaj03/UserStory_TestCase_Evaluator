@@ -1,0 +1,1 @@
+{"error":"Failed to evaluate user story. Please try again later.","details":"Input contains only code block markers, no actual content","errorType":"Error","model":"llama-3.1-8b-instant","timestamp":"2026-03-23T09:41:58.969Z"}

@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { repairJsonString } = require('./jsonRepair');
+const { retrieve, formatRagContext } = require('./utils/ragEngine');
+const { runDeepEvalMetricsMock } = require('./utils/evalMetrics');
+const { logTrace } = require('./utils/observability');
 
 // Import Groq SDK - handle both CommonJS and ESM exports
 let Groq;
@@ -152,7 +155,7 @@ function calculateHealthMetrics(parameters) {
 }
 
 app.post('/evaluate', validateUserStory, async (req, res) => {
-  const { userStory } = req.body;
+  const { userStory, runDeepEval } = req.body;
   console.log(`[${new Date().toISOString()}] Evaluating user story of ${userStory.length} characters`);
 
   // Guard: Check if Groq is initialized
@@ -163,8 +166,12 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
     });
   }
 
+  const ragExamples = await retrieve(userStory, "user_story", 3);
+  const ragContext = formatRagContext(ragExamples, "user_story");
+
   const prompt = `
     Analyze this User Story: "${userStory}"
+    ${ragContext}
     Evaluate it using the INVEST criteria. For each criterion, assign a score from 1 (poor) to 5 (excellent) and provide a brief breakdown.
     Only assign a score of 5 if ALL aspects of the criterion are fully met with no gaps. If any aspect is missing or unclear, reduce the score accordingly. Be critical and realistic in your assessment.
     - Independent: The story should stand alone and not depend on others to avoid scheduling bottlenecks.
@@ -217,6 +224,24 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
     
     const result = JSON.parse(repaired);
 
+    result.ragContext = ragExamples.map(ex => ({
+      id: ex.id, quality: ex.quality, text: ex.text ? ex.text.substring(0, 200) : "", relevanceScore: ex.score
+    }));
+
+    if (runDeepEval) {
+      result.deepEvalMetric = await runDeepEvalMetricsMock(groq, MODEL, userStory);
+    }
+    
+    // Telemetry: Fire off to Langfuse
+    const mappedScores = {};
+    if (result.parameters) {
+      result.parameters.forEach(p => mappedScores[p.name] = (p.score / 5.0));
+    }
+    if (result.deepEvalMetric) {
+      Object.entries(result.deepEvalMetric).forEach(([k, v]) => mappedScores[k] = v.score);
+    }
+    logTrace("UserStory Evaluation", userStory, result, mappedScores);
+
     console.log(`[${new Date().toISOString()}] Evaluation complete - Score: ${result.totalScore}`);
     res.json(result);
   } catch (error) {
@@ -256,11 +281,15 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
 
 // Test case evaluation endpoint
 app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
-  const { testCase } = req.body;
+  const { testCase, runDeepEval } = req.body;
   console.log(`[${new Date().toISOString()}] Evaluating test case of ${testCase.length} characters`);
+
+  const ragExamples = await retrieve(testCase, "test_case", 3);
+  const ragContext = formatRagContext(ragExamples, "test_case");
 
   const prompt = `
     Analyze this Test Case: "${testCase}"
+    ${ragContext}
       Evaluate it based on the following criteria:
       1. Clarity: Are the steps easy to understand and follow?
       2. Requirements Traceability: Do test cases cover all requirements?
@@ -298,11 +327,29 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
     const content = message.choices[0].message.content;
     const result = JSON.parse(repairJsonString(content));
 
+    result.ragContext = ragExamples.map(ex => ({
+      id: ex.id, quality: ex.quality, text: ex.text ? ex.text.substring(0, 200) : "", relevanceScore: ex.score
+    }));
+
     console.log(`[${new Date().toISOString()}] Test case evaluation complete - Score: ${result.totalScore}`);
     
     // Calculate health metrics based on the evaluation parameters
     const healthMetrics = calculateHealthMetrics(result.parameters);
     
+    if (runDeepEval) {
+      result.deepEvalMetric = await runDeepEvalMetricsMock(groq, MODEL, testCase);
+    }
+
+    // Telemetry: Fire off to Langfuse
+    const mappedScores = {};
+    if (result.parameters) {
+      result.parameters.forEach(p => mappedScores[p.name] = (p.score / 5.0));
+    }
+    if (result.deepEvalMetric) {
+      Object.entries(result.deepEvalMetric).forEach(([k, v]) => mappedScores[k] = v.score);
+    }
+    logTrace("TestCase Evaluation", testCase, result, mappedScores);
+
     // Add health metrics to the response
     const responseData = {
       ...result,
@@ -419,10 +466,14 @@ app.post('/generate-user-stories', async (req, res) => {
     return res.status(400).json({ error: 'Feature description must be at least 5 characters' });
   }
 
+  const ragExamples = await retrieve(feature, "user_story", 3);
+  const ragContext = formatRagContext(ragExamples, "user_story");
+
   const prompt = `You are an expert Agile Product Owner. Break down this feature/epic into smaller, highly actionable User Stories:
 
 FEATURE DESCRIPTION:
 "${feature}"
+${ragContext}
 
 CRITICAL: You must respond with ONLY a valid JSON object in the exact structure below. Do not use markdown blocks:
 {
@@ -455,6 +506,10 @@ Ensure you generate at least 3 distinct user stories. Return ONLY the raw JSON o
     const content = message.choices[0].message.content;
     const result = JSON.parse(repairJsonString(content));
 
+    result.ragContext = ragExamples.map(ex => ({
+      id: ex.id, quality: ex.quality, text: ex.text ? ex.text.substring(0, 200) : "", relevanceScore: ex.score
+    }));
+
     console.log(`[${new Date().toISOString()}] User story generation complete`);
     res.json(result);
   } catch (error) {
@@ -483,9 +538,13 @@ app.post('/generate-test-cases', async (req, res) => {
     return res.status(400).json({ error: 'Feature description must be at least 5 characters' });
   }
 
+  const ragExamples = await retrieve(feature, "test_case", 3);
+  const ragContext = formatRagContext(ragExamples, "test_case");
+
   const prompt = `You are a professional QA test case generator. Generate comprehensive test cases for this feature:
 
 "${feature}"
+${ragContext}
 
 CRITICAL: You must respond with ONLY a valid JSON object (no markdown, no explanations, no preamble). The JSON structure must be exactly:
 
@@ -530,6 +589,10 @@ Generate at least 3 positive test cases and populate ALL categories. Return ONLY
     
     console.log(`[${new Date().toISOString()}] Attempting to parse repaired JSON (length: ${repaired.length})`);
     const result = JSON.parse(repaired);
+
+    result.ragContext = ragExamples.map(ex => ({
+      id: ex.id, quality: ex.quality, text: ex.text ? ex.text.substring(0, 200) : "", relevanceScore: ex.score
+    }));
 
     console.log(`[${new Date().toISOString()}] Test case generation complete`);
     res.json(result);
