@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: qa-evaluator-backend
+    name: qa-evaluator-python-api-v2
     env: python
     plan: free
     region: oregon
