@@ -912,4 +912,6 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Export the Express API for Vercel Serverless
-module.exports = app;
+module.exports = (req, res) => {
+  return app(req, res);
+};
