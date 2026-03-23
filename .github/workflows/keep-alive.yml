@@ -1,0 +1,16 @@
+name: Keep Backend Awake
+
+on:
+  schedule:
+    # Run every 14 minutes to prevent Render's 15-minute inactivity nap
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Allows you to manually trigger the workflow if needed
+
+jobs:
+  ping-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Backend Health Check
+        run: |
+          echo "Pinging backend at https://qa-evaluator-backend.onrender.com/health ..."
+          curl -f -sS https://qa-evaluator-backend.onrender.com/health || echo "Ping completed (even if offline, the request wakes it up)."

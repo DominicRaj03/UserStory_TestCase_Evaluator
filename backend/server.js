@@ -756,8 +756,13 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n🚀 Backend running on http://localhost:${PORT}`);
-  console.log(`📊 Using model: ${MODEL}`);
-  console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}\n`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Backend running on http://localhost:${PORT}`);
+    console.log(`📊 Using model: ${MODEL}`);
+    console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}\n`);
+  });
+}
+
+// Export the Express API for Vercel Serverless
+module.exports = app;
