@@ -5,6 +5,7 @@ const { repairJsonString } = require('./jsonRepair');
 const { retrieve, formatRagContext } = require('./utils/ragEngine');
 const { runDeepEvalMetricsMock } = require('./utils/evalMetrics');
 const { logTrace } = require('./utils/observability');
+const { speedInsightsMiddleware } = require('./utils/speedInsights');
 
 // Import Groq SDK - handle both CommonJS and ESM exports
 let Groq;
@@ -23,6 +24,14 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// Inject Vercel Speed Insights into HTML responses
+// This middleware will automatically inject the Speed Insights script
+// into any HTML pages served by this application
+app.use(speedInsightsMiddleware({
+  debug: process.env.NODE_ENV !== 'production',
+  sampleRate: 1
+}));
 
 // Serve static files from frontend build
 app.use(express.static(path.join(__dirname, '../frontend/build')));
