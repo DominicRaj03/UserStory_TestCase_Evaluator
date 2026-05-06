@@ -227,12 +227,12 @@ const TestCaseEvaluator = ({ setServerBusy, initialValue }) => {
             {!collapsed.agentic && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
                 <div>
-                  {(results.metrics?.faithfulness < 90 || results.metrics?.coverage < 90) ? (
+                  {(results.totalScore < 23 || (results.metrics && (results.metrics.faithfulness < 90 || results.metrics.coverage < 90))) ? (
                     <RefinementPanel 
                       original={testCase} 
                       type="test_case" 
                       findings={results.parameters.map(p => p.findings).join(' ')} 
-                      grade="B" 
+                      grade={results.totalScore >= 20 ? "B" : results.totalScore >= 15 ? "C" : "D"} 
                       onApply={(refined) => { setTestCase(refined); setResults(null); }}
                     />
                   ) : (
