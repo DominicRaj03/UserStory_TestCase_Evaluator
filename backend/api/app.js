@@ -212,7 +212,7 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
         { "name": "Small", "score": number, "findings": "string" },
         { "name": "Testable", "score": number, "findings": "string" }
       ],
-      "investOverview": "• Independent: [Detailed reason]\n• Negotiable: [Detailed reason]\n• Valuable: [Detailed reason]\n• Estimable: [Detailed reason]\n• Small: [Detailed reason]\n• Testable: [Detailed reason]",
+      "investOverview": "A detailed 3-4 sentence overview explaining the overall INVEST score for this user story. Justify the score and highlight its strengths and weaknesses.",
       "grade": "A" | "B" | "C" | "D", // A: 27-30, B: 22-26, C: 16-21, D: 6-15
       "recommendations": ["string", "string", "string"]
     }
@@ -528,7 +528,7 @@ CRITICAL: You must respond with ONLY a valid JSON object in the exact structure 
         "estimable": 5,
         "small": 5,
         "testable": 5,
-        "investDetailedBreakdown": "• Independent: [Reason]\n• Negotiable: [Reason]\n• Valuable: [Reason]\n• Estimable: [Reason]\n• Small: [Reason]\n• Testable: [Reason]"
+        "investOverview": "A 2-3 sentence overview explaining the overall INVEST score for this user story. Justify the score and highlight its strengths and weaknesses."
       }
     }
   ]

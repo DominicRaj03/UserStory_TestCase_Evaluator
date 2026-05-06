@@ -265,18 +265,9 @@ function BulkUserStoryEvaluator({ setServerBusy, onAnalyze }) {
                             lineHeight: 1.5,
                             whiteSpace: 'pre-wrap'
                           }}>
-                            <strong style={{ color: '#1e293b', fontSize: '0.65rem', textTransform: 'uppercase', marginRight: 6, display: 'block', marginBottom: 4 }}>Detailed Analysis:</strong>
-                            {typeof r.investOverview === 'object' ? (
-                              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                {Object.entries(r.investOverview).map(([k, v], idx) => (
-                                  <span key={idx}>
-                                    • <strong style={{ textTransform: 'capitalize' }}>{k}:</strong> {v}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              r.investOverview || r.recommendations?.[0] || "This story is well-defined and meets standard INVEST quality benchmarks."
-                            )}
+                            <strong style={{ color: '#1e293b', fontSize: '0.65rem', textTransform: 'uppercase', marginRight: 6, display: 'block', marginBottom: 4 }}>INVEST Score Overview:</strong>
+                            {r.investOverview || r.recommendations?.[0] || "This story is well-defined and meets standard INVEST quality benchmarks."}
+
                           </p>
                         </div>
 

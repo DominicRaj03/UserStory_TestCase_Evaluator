@@ -84,7 +84,7 @@ const UserStoryGenerator = ({ setServerBusy, onAnalyze }) => {
                   <div style={{ marginTop: 20, padding: 16, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
                     <p style={{ fontSize: '0.7rem', fontWeight: 900, color: '#64748b', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.05em' }}>INVEST ANALYSIS</p>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                      {Object.entries(story.analysis).filter(([k]) => k !== 'justification').map(([k, v], idx) => (
+                      {Object.entries(story.analysis).filter(([k]) => !['justification', 'investDetailedBreakdown', 'investOverview'].includes(k)).map(([k, v], idx) => (
                         <div key={idx} style={{ flex: 1, textAlign: 'center', background: '#fff', padding: '6px 0', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                           <p style={{ margin: 0, fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8' }}>{k[0].toUpperCase()}</p>
                           <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 900, color: v >= 4 ? '#10b981' : '#f59e0b' }}>{v}</p>
@@ -92,18 +92,8 @@ const UserStoryGenerator = ({ setServerBusy, onAnalyze }) => {
                       ))}
                     </div>
                     <p style={{ fontSize: '0.78rem', color: '#475569', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                      <strong style={{ color: '#1e293b', fontSize: '0.7rem', textTransform: 'uppercase', marginRight: 6, display: 'block', marginBottom: 4 }}>Detailed Analysis:</strong>
-                      {typeof story.analysis.investDetailedBreakdown === 'object' ? (
-                        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {Object.entries(story.analysis.investDetailedBreakdown).map(([k, v], idx) => (
-                            <span key={idx} style={{ display: 'block' }}>
-                              • <strong style={{ textTransform: 'capitalize' }}>{k}:</strong> {v}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        story.analysis.investDetailedBreakdown || story.analysis.justification || "This story is well-defined and meets standard INVEST quality benchmarks."
-                      )}
+                      <strong style={{ color: '#1e293b', fontSize: '0.7rem', textTransform: 'uppercase', marginRight: 6, display: 'block', marginBottom: 4 }}>INVEST Score Overview:</strong>
+                      {story.analysis.investOverview || story.analysis.investDetailedBreakdown || story.analysis.justification || "This story is well-defined and meets standard INVEST quality benchmarks."}
                     </p>
                   </div>
                 )}
