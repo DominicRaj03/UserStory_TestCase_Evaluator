@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ComposedChart, Bar, Line, Area, Legend, BarChart, PieChart, Pie, Cell, LabelList
 } from 'recharts';
+import { db } from '../firebase';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 /* Dynamic Mock Database of Projects/Teams */
 /* Dynamic Mock Database of Projects/Teams */
@@ -353,14 +355,48 @@ const AnalyticInsights = () => {
   const [dayModalData, setDayModalData] = useState([]);
   const [modalTitle, setModalTitle] = useState('');
   const [modalData, setModalData] = useState([]);
+  const [liveData, setLiveData] = useState([]);
 
+  // Subscribe to live Firestore telemetry for global team ROI
+  useEffect(() => {
+    try {
+      const q = query(collection(db, 'team_evaluations'), orderBy('timestamp', 'desc'));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const events = [];
+        snapshot.forEach((doc) => events.push({ id: doc.id, ...doc.data() }));
+        setLiveData(events);
+      });
+      return () => unsubscribe();
+    } catch (e) {
+      console.warn("Firestore not configured yet or offline", e);
+    }
+  }, []);
 
   // Filter projects based on search
   const availableProjects = Object.keys(projectDatabase).filter(p => p.toLowerCase().includes(searchQuery.toLowerCase()));
   const currentData = projectDatabase[activeProject] || projectDatabase['Global'];
 
-  // Calculate Display KPIs based on month dropdown
+  // Calculate Display KPIs based on month dropdown and live data
   const getDisplayKpis = () => {
+    // If we are on Global and have live data, calculate REAL KPIs!
+    if (activeProject === 'Global' && activeMonth === 'Consolidated' && liveData.length > 0) {
+      const totalEvents = liveData.length;
+      const timeSavedHrs = liveData.reduce((sum, el) => sum + (el.timeSaved || 0), 0) / 60;
+      const manualTimeHrs = liveData.reduce((sum, el) => sum + (el.timeSaved === 45 ? 50 : 35), 0) / 60;
+      const aiTimeHrs = manualTimeHrs - timeSavedHrs;
+      const costSaved = timeSavedHrs * 65; // Estimated $65/hr fully loaded cost
+      
+      return {
+        humanTimeHrs: Math.round(manualTimeHrs),
+        aiTimeHrs: Math.round(aiTimeHrs) || 1,
+        timeSavedHrs: Math.round(timeSavedHrs),
+        costSaved: Math.round(costSaved),
+        totalAiCost: Math.round(totalEvents * 0.12),
+        efficiencyUplift: Math.round((timeSavedHrs / (aiTimeHrs || 1)) * 100),
+        outputMultiplier: parseFloat((manualTimeHrs / (aiTimeHrs || 1)).toFixed(1))
+      };
+    }
+
     if (activeMonth === 'Consolidated') {
       return currentData.kpis;
     }
@@ -389,6 +425,11 @@ const AnalyticInsights = () => {
   };
 
   const displayKpis = getDisplayKpis();
+  
+  // Replace search history with Live Data if applicable
+  const displayHistory = (activeProject === 'Global' && liveData.length > 0) 
+    ? liveData.map(d => ({ id: d.id.substring(0, 8), user: 'Team Member', task: d.artifactPreview, type: d.type, manualTime: d.timeSaved === 45 ? 50 : 35, aiTime: d.timeSaved === 45 ? 5 : 5, cost: 0.12, efficiency: d.grade === 'A' ? 98 : d.grade === 'B' ? 92 : 85 }))
+    : currentData.searchHistory;
 
   // Filtered Data for Charts
   const filteredTrends = useMemo(() => {
@@ -589,7 +630,7 @@ const AnalyticInsights = () => {
           icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>} 
           trend="BENCHMARKED"
           description="Total hours required if work was done manually. Based on a 40-minute mean average across all experience levels."
-          onClick={() => { setModalTitle('Human Effort'); setModalData(currentData.searchHistory); setIsModalOpen(true); }}
+          onClick={() => { setModalTitle('Human Effort'); setModalData(displayHistory); setIsModalOpen(true); }}
         />
         <MetricCard 
           title="AI Velocity" 
@@ -599,7 +640,7 @@ const AnalyticInsights = () => {
           icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2V4"/><path d="M12 20V22"/><path d="M4.93 4.93L6.34 6.34"/><path d="M17.66 17.66L19.07 19.07"/><path d="M2 12H4"/><path d="M20 12H22"/><path d="M4.93 19.07L6.34 17.66"/><path d="M17.66 6.34L19.07 4.93"/><circle cx="12" cy="12" r="4"/></svg>} 
           trend="ACCELERATED"
           description="The actual clock time spent by AI agents generating and evaluating artifacts in minutes."
-          onClick={() => { setModalTitle('AI Velocity'); setModalData(currentData.searchHistory); setIsModalOpen(true); }}
+          onClick={() => { setModalTitle('AI Velocity'); setModalData(displayHistory); setIsModalOpen(true); }}
         />
         <MetricCard 
           title="Time Reclaimed" 
@@ -609,7 +650,7 @@ const AnalyticInsights = () => {
           icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>} 
           trend="UP" 
           description="Net hours saved (Human Time - AI Time). Represents the total capacity returned to the engineering team."
-          onClick={() => { setModalTitle('Efficiency Gains'); setModalData(currentData.searchHistory); setIsModalOpen(true); }}
+          onClick={() => { setModalTitle('Efficiency Gains'); setModalData(displayHistory); setIsModalOpen(true); }}
         />
       </div>
 

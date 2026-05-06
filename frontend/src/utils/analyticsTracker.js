@@ -1,4 +1,7 @@
-export const trackEvaluation = (type, artifact, results) => {
+import { db } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
+
+export const trackEvaluation = async (type, artifact, results) => {
   try {
     const history = JSON.parse(localStorage.getItem('qa_agent_daily_tracker') || '[]');
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -17,8 +20,17 @@ export const trackEvaluation = (type, artifact, results) => {
       timeSaved: type === 'User Story' ? 45 : 30 // minutes saved per artifact vs manual
     };
     
+    // Save to local storage for Daily Tracker
     history.unshift(entry);
     localStorage.setItem('qa_agent_daily_tracker', JSON.stringify(history.slice(0, 200))); // Keep last 200
+
+    // Push to global Firestore for ROI Showcase
+    try {
+      await addDoc(collection(db, 'team_evaluations'), entry);
+      console.log('Evaluation saved to global Firestore ROI dashboard');
+    } catch (dbError) {
+      console.error('Failed to write to Firestore:', dbError);
+    }
   } catch (e) {
     console.error('Failed to track evaluation:', e);
   }
