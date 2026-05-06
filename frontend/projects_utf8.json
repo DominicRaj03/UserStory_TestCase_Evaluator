@@ -1,0 +1,72 @@
+﻿{
+  "status": "success",
+  "result": [
+    {
+      "projectId": "genai-1868e",
+      "projectNumber": "950764060633",
+      "displayName": "GenAi",
+      "name": "projects/genai-1868e",
+      "resources": {
+        "hostingSite": "genai-1868e"
+      },
+      "state": "ACTIVE",
+      "etag": "1_eb1a0c35-3d69-4e7f-b1e2-f0404e6278a8"
+    },
+    {
+      "projectId": "project-management-c4ac7",
+      "projectNumber": "689496264064",
+      "displayName": "Project Management",
+      "name": "projects/project-management-c4ac7",
+      "resources": {
+        "hostingSite": "project-management-c4ac7"
+      },
+      "state": "ACTIVE",
+      "etag": "1_ec58a593-50c3-40ca-9e84-d59d0c7a300b"
+    },
+    {
+      "projectId": "qa-evaluator-4557f",
+      "projectNumber": "1074262932071",
+      "displayName": "QA Evaluator",
+      "name": "projects/qa-evaluator-4557f",
+      "resources": {
+        "hostingSite": "qa-evaluator-4557f"
+      },
+      "state": "ACTIVE",
+      "etag": "1_78694786-e5a7-47b6-bda0-8e9eeb16ee2b"
+    },
+    {
+      "projectId": "release-plan-bbfe8",
+      "projectNumber": "258418713764",
+      "displayName": "Release Plan",
+      "name": "projects/release-plan-bbfe8",
+      "resources": {
+        "hostingSite": "release-plan-bbfe8"
+      },
+      "state": "ACTIVE",
+      "etag": "1_ea0e7c0a-8c23-4ac8-8fad-3402ec8b45bb"
+    },
+    {
+      "projectId": "resource-management-deb55",
+      "projectNumber": "868299899719",
+      "displayName": "Resource Management",
+      "name": "projects/resource-management-deb55",
+      "resources": {
+        "hostingSite": "resource-management-deb55"
+      },
+      "state": "ACTIVE",
+      "etag": "1_13027bf4-c9e2-4566-939b-2c2334e34eb2"
+    },
+    {
+      "projectId": "weekly-planner-cmd",
+      "projectNumber": "895897100026",
+      "displayName": "Weekly Planner",
+      "name": "projects/weekly-planner-cmd",
+      "resources": {
+        "hostingSite": "weekly-planner-cmd"
+      },
+      "state": "ACTIVE",
+      "etag": "1_097f1ead-4131-4074-8ebf-cb6d6ba07842"
+    }
+  ]
+}
+
