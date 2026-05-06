@@ -160,8 +160,17 @@ const UserStoryEvaluator = ({ setServerBusy, initialValue }) => {
                   {results.investOverview && (
                     <div style={{ padding: 16, borderRadius: 16, background: '#f5f3ff', border: '1.5px solid #c7d2fe', marginBottom: 4 }}>
                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#4338ca', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                         <strong style={{ display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.05em' }}>Overview Analysis:</strong>
-                         {results.investOverview}
+                         {typeof results.investOverview === 'object' ? (
+                           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                             {Object.entries(results.investOverview).map(([k, v], idx) => (
+                               <span key={idx} style={{ display: 'block' }}>
+                                 • <strong style={{ textTransform: 'capitalize' }}>{k}:</strong> {v}
+                               </span>
+                             ))}
+                           </div>
+                         ) : (
+                           results.investOverview
+                         )}
                        </p>
                     </div>
                   )}

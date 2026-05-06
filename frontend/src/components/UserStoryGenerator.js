@@ -93,7 +93,17 @@ const UserStoryGenerator = ({ setServerBusy, onAnalyze }) => {
                     </div>
                     <p style={{ fontSize: '0.78rem', color: '#475569', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                       <strong style={{ color: '#1e293b', fontSize: '0.7rem', textTransform: 'uppercase', marginRight: 6, display: 'block', marginBottom: 4 }}>Detailed Analysis:</strong>
-                      {story.analysis.investDetailedBreakdown || story.analysis.justification || "This story is well-defined and meets standard INVEST quality benchmarks for sprint readiness."}
+                      {typeof story.analysis.investDetailedBreakdown === 'object' ? (
+                        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {Object.entries(story.analysis.investDetailedBreakdown).map(([k, v], idx) => (
+                            <span key={idx} style={{ display: 'block' }}>
+                              • <strong style={{ textTransform: 'capitalize' }}>{k}:</strong> {v}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        story.analysis.investDetailedBreakdown || story.analysis.justification || "This story is well-defined and meets standard INVEST quality benchmarks."
+                      )}
                     </p>
                   </div>
                 )}
