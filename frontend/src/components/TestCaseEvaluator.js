@@ -4,6 +4,7 @@ import RefinementPanel from './agentic/RefinementPanel';
 import MultiAgentDashboard from './agentic/MultiAgentDashboard';
 import AgentChat from './agentic/AgentChat';
 import { fetchWithRetry } from '../utils/api';
+import { trackEvaluation } from '../utils/analyticsTracker';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
 
@@ -66,7 +67,10 @@ const TestCaseEvaluator = ({ setServerBusy, initialValue }) => {
       });
       
       const data = await res.json();
-      if (res.ok) setResults(data);
+      if (res.ok) {
+        setResults(data);
+        trackEvaluation('Test Case', testCase, data);
+      }
       else setError(data.error || 'Evaluation failed');
     } catch (err) {
       setError('Connection failed. Please check backend status.');

@@ -6,6 +6,7 @@ import TestCaseGenerator from './components/TestCaseGenerator';
 import BulkUserStoryEvaluator from './components/BulkUserStoryEvaluator';
 import BulkTestCaseEvaluator from './components/BulkTestCaseEvaluator';
 import AnalyticInsights from './components/AnalyticInsights';
+import DailyTracker from './components/DailyTracker';
 
 const NAV_GROUPS = [
   {
@@ -33,6 +34,7 @@ const NAV_GROUPS = [
     title: 'ANALYTICS',
     items: [
       { id: 'roi', label: 'ROI Showcase', color: '#ec4899' },
+      { id: 'tracker', label: 'Daily Tracker', color: '#10b981' }
     ]
   }
 ];
@@ -69,6 +71,7 @@ const App = () => {
       case 'bulk-us': return <BulkUserStoryEvaluator setServerBusy={setServerBusy} onAnalyze={handleAnalyzeStory} />;
       case 'bulk-tc': return <BulkTestCaseEvaluator setServerBusy={setServerBusy} onAnalyze={handleAnalyzeTestCase} />;
       case 'roi': return <AnalyticInsights />;
+      case 'tracker': return <DailyTracker />;
       default: return <UserStoryEvaluator setServerBusy={setServerBusy} initialValue={initialStory || ''} />;
     }
   };
@@ -180,7 +183,7 @@ const App = () => {
             <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#1a1a2e', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {activeLabel} 
               <span style={{ color: '#94a3b8', fontWeight: 500, marginLeft: 4 }}>
-                {activeTab.includes('-gen') ? 'GENERATOR' : activeTab.includes('bulk-') ? 'UPLOAD' : 'EVALUATOR'}
+                {activeTab.includes('-gen') ? 'GENERATOR' : activeTab.includes('bulk-') ? 'UPLOAD' : (activeTab === 'roi' || activeTab === 'tracker' ? 'DASHBOARD' : 'EVALUATOR')}
               </span>
             </h2>
           </div>

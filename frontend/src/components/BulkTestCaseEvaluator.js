@@ -106,9 +106,11 @@ function BulkTestCaseEvaluator({ setServerBusy, onAnalyze }) {
           });
 
           const data = await res.json();
-          return res.ok
-            ? { ...item, ...data, evaluationDone: true, rowNumber: idx + 2 }
-            : { ...item, error: data.error || 'Evaluation failed', rowNumber: idx + 2 };
+          if (res.ok) {
+            import('../utils/analyticsTracker').then(({ trackEvaluation }) => trackEvaluation('Test Case', tc, data));
+            return { ...item, ...data, evaluationDone: true, rowNumber: idx + 2 };
+          }
+          return { ...item, error: data.error || 'Evaluation failed', rowNumber: idx + 2 };
         } catch (err) {
           return { ...item, error: 'Network error', rowNumber: idx + 2 };
         }
