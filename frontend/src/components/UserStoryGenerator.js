@@ -91,7 +91,10 @@ const UserStoryGenerator = ({ setServerBusy, onAnalyze }) => {
                         </div>
                       ))}
                     </div>
-                    <p style={{ fontSize: '0.78rem', color: '#475569', margin: 0, lineHeight: 1.4, fontStyle: 'italic' }}>"{story.analysis.justification}"</p>
+                    <p style={{ fontSize: '0.78rem', color: '#475569', margin: 0, lineHeight: 1.5 }}>
+                      <strong style={{ color: '#1e293b', fontSize: '0.7rem', textTransform: 'uppercase', marginRight: 6 }}>Detailed Analysis:</strong>
+                      {story.analysis.investDetailedBreakdown || story.analysis.justification || "This story is well-defined and meets standard INVEST quality benchmarks for sprint readiness."}
+                    </p>
                   </div>
                 )}
 

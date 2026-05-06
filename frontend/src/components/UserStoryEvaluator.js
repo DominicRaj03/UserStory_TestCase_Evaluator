@@ -156,16 +156,26 @@ const UserStoryEvaluator = ({ setServerBusy, initialValue }) => {
                 icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5"><path d="M12 2v20"/><path d="m5 15 7 7 7-7"/><path d="m5 9 7 7 7-7"/><path d="m5 3 7 7 7-7"/></svg>}
               />
               {!collapsed.criteria && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
-                   {results.parameters.map((p, i) => (
-                    <div key={i} style={{ padding: 14, borderRadius: 14, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ fontWeight: 800, fontSize: '0.78rem', color: '#64748b', textTransform: 'uppercase' }}>{p.name}</span>
-                        <span style={{ fontWeight: 900, fontSize: '0.85rem', color: getScoreColor(p.score * 6) }}>{p.score}/5</span>
-                      </div>
-                      <p style={{ fontSize: '0.8rem', color: '#1e293b', margin: 0, lineHeight: 1.5 }}>{p.findings}</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {results.investOverview && (
+                    <div style={{ padding: 16, borderRadius: 16, background: '#f5f3ff', border: '1.5px solid #c7d2fe', marginBottom: 4 }}>
+                       <p style={{ margin: 0, fontSize: '0.85rem', color: '#4338ca', lineHeight: 1.6 }}>
+                         <strong style={{ display: 'block', fontSize: '0.7rem', textTransform: 'uppercase', marginBottom: 4, letterSpacing: '0.05em' }}>Overview Analysis:</strong>
+                         {results.investOverview}
+                       </p>
                     </div>
-                  ))}
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
+                    {results.parameters.map((p, i) => (
+                      <div key={i} style={{ padding: 14, borderRadius: 14, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.78rem', color: '#64748b', textTransform: 'uppercase' }}>{p.name}</span>
+                          <span style={{ fontWeight: 900, fontSize: '0.85rem', color: getScoreColor(p.score * 6) }}>{p.score}/5</span>
+                        </div>
+                        <p style={{ fontSize: '0.8rem', color: '#1e293b', margin: 0, lineHeight: 1.5 }}>{p.findings}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

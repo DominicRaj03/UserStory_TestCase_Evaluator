@@ -261,12 +261,12 @@ function BulkUserStoryEvaluator({ setServerBusy, onAnalyze }) {
                           <p style={{ 
                             marginTop: 14, 
                             fontSize: '0.75rem', 
-                            color: '#64748b', 
-                            fontStyle: 'italic',
+                            color: '#475569', 
                             margin: '14px 0 0 0',
                             lineHeight: 1.5
                           }}>
-                            "{r.recommendations?.[0] || "High quality requirement that can be estimated independently."}"
+                            <strong style={{ color: '#1e293b', fontSize: '0.65rem', textTransform: 'uppercase', marginRight: 6 }}>Detailed Analysis:</strong>
+                            {r.investOverview || r.recommendations?.[0] || "This story is well-defined and meets standard INVEST quality benchmarks for development readiness."}
                           </p>
                         </div>
 
