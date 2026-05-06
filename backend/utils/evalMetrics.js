@@ -24,14 +24,14 @@ METRIC DEFINITIONS:
 5. Answer Relevancy: Is it a complete and directly relevant software artifact?
 6. Answer Correctness: Is the content factually and structurally correct for its artifact type?
 
-Respond ONLY with a JSON object exactly like this (no markdown, no extra text):
+Respond ONLY with a JSON object exactly like this structure (do not copy the values, generate your own numerical scores based on the text):
 {
-  "Faithfulness": { "score": 0.65, "passed": false, "reason": "Deducted 0.25 because it assumes a dashboard exists without definition..." },
-  "Hallucination": { "score": 0.85, "passed": true, "reason": "..." },
-  "Contextual Precision": { "score": 0.55, "passed": false, "reason": "..." },
-  "Contextual Recall": { "score": 0.75, "passed": true, "reason": "..." },
-  "Answer Relevancy": { "score": 0.90, "passed": true, "reason": "..." },
-  "Answer Correctness": { "score": 0.82, "passed": true, "reason": "..." }
+  "Faithfulness": { "score": <number 0.0-1.0>, "passed": <boolean>, "reason": "<detailed string reason>" },
+  "Hallucination": { "score": <number 0.0-1.0>, "passed": <boolean>, "reason": "<detailed string reason>" },
+  "Contextual Precision": { "score": <number 0.0-1.0>, "passed": <boolean>, "reason": "<detailed string reason>" },
+  "Contextual Recall": { "score": <number 0.0-1.0>, "passed": <boolean>, "reason": "<detailed string reason>" },
+  "Answer Relevancy": { "score": <number 0.0-1.0>, "passed": <boolean>, "reason": "<detailed string reason>" },
+  "Answer Correctness": { "score": <number 0.0-1.0>, "passed": <boolean>, "reason": "<detailed string reason>" }
 }
 `;
 

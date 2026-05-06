@@ -232,6 +232,12 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
     
     const result = JSON.parse(repaired);
 
+    // Enforce deterministic math: LLMs are bad at addition, so recalculate the total score and grade
+    if (result.parameters && Array.isArray(result.parameters)) {
+      result.totalScore = result.parameters.reduce((sum, p) => sum + (Number(p.score) || 0), 0);
+      result.grade = result.totalScore >= 27 ? 'A' : result.totalScore >= 22 ? 'B' : result.totalScore >= 16 ? 'C' : 'D';
+    }
+
     result.ragContext = ragExamples.map(ex => ({
       id: ex.id, quality: ex.quality, text: ex.text ? ex.text.substring(0, 200) : "", relevanceScore: ex.score
     }));
@@ -346,6 +352,11 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
 
     const content = message.choices[0].message.content;
     const result = JSON.parse(repairJsonString(content));
+
+    // Enforce deterministic math for test cases
+    if (result.parameters && Array.isArray(result.parameters)) {
+      result.totalScore = result.parameters.reduce((sum, p) => sum + (Number(p.score) || 0), 0);
+    }
 
     result.ragContext = ragExamples.map(ex => ({
       id: ex.id, quality: ex.quality, text: ex.text ? ex.text.substring(0, 200) : "", relevanceScore: ex.score
