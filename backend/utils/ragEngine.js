@@ -94,7 +94,7 @@ async function retrieve(queryText, entryType = null, topK = 3) {
   if (retrieved.length === 0) {
     const fallbackData = getFallbackExamples(entryType);
     retrieved = fallbackData.map(f => ({
-       id: f.id,
+       id: f.id || `fb-${Math.random().toString(36).substr(2, 5)}`, // Ensure ID is NEVER missing
        score: "0.850",
        type: f.type,
        quality: f.quality,

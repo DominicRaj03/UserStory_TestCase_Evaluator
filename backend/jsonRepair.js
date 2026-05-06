@@ -99,11 +99,14 @@ function extractJsonFromText(text) {
 function fixJsonIssues(json) {
   let result = json;
 
-  // Fix unquoted keys (but be careful not to break URLs or strings)
-  result = result.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
+  // Fix unquoted keys (DANGEROUS: disabled because it breaks valid strings like "username: u1, password: p1")
+  // result = result.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
 
   // Remove trailing commas before } or ]
   result = result.replace(/,\s*([}\]])/g, '$1');
+
+  // Fix TypeScript-style union values like "Low" | "Medium" | "High"  keep first value
+  result = result.replace(/"([^"]+)"\s*\|\s*"[^"]*"(\s*\|\s*"[^"]*")*/g, '"$1"');
 
   // Fix missing commas between items in arrays  
   result = result.replace(/(\])\s*(\{|\[)/g, '$1,$2');
@@ -123,29 +126,35 @@ function fixJsonIssues(json) {
 function recoverJson(json, parseError) {
   console.log(`[${new Date().toISOString()}] [JSON Repair] Recovery attempt - original error at position ${parseError.message}`);
 
-  const stack = [];
-  let depth = 0;
-  
-  try {
-    // Try to find the deepest valid JSON by progressively removing from the end
-    for (let i = json.length; i > 10; i--) {
-      try {
-        const candidate = json.substring(0, i);
-        // Try to make it valid by adding closing braces
-        const openBraces = (candidate.match(/\{/g) || []).length;
-        const closeBraces = (candidate.match(/\}/g) || []).length;
-        const toAdd = openBraces > closeBraces ? '}'.repeat(openBraces - closeBraces) : '';
-        
-        const test = candidate + toAdd;
-        JSON.parse(test);
-        console.log(`[${new Date().toISOString()}] [JSON Repair] Found valid JSON at length ${test.length}`);
-        return test;
-      } catch {
-        // Continue trying
-      }
+  // Try to find the deepest valid JSON by progressively removing from the end
+  for (let i = json.length; i > 10; i--) {
+    try {
+      let candidate = json.substring(0, i);
+      // Strip trailing partial tokens (e.g., a key without a value)
+      candidate = candidate.replace(/,\s*"[^"]*"?\s*:?\s*$/, '');
+      candidate = candidate.replace(/,\s*$/, '');
+      
+      // Balance braces and brackets
+      const openBraces = (candidate.match(/\{/g) || []).length;
+      const closeBraces = (candidate.match(/\}/g) || []).length;
+      const openBrackets = (candidate.match(/\[/g) || []).length;
+      const closeBrackets = (candidate.match(/\]/g) || []).length;
+      
+      let suffix = '';
+      const bracketsNeeded = openBrackets - closeBrackets;
+      const bracesNeeded = openBraces - closeBraces;
+      
+      // Close brackets first (inner), then braces (outer)
+      if (bracketsNeeded > 0) suffix += ']'.repeat(bracketsNeeded);
+      if (bracesNeeded > 0) suffix += '}'.repeat(bracesNeeded);
+      
+      const test = candidate + suffix;
+      JSON.parse(test);
+      console.log(`[${new Date().toISOString()}] [JSON Repair] Found valid JSON at length ${test.length}`);
+      return test;
+    } catch {
+      // Continue trying
     }
-  } catch (e) {
-    // Last resort failed
   }
 
   throw new Error(`Unable to recover valid JSON from input. Last error: ${parseError.message}`);

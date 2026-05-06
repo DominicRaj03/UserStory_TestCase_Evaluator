@@ -4,7 +4,9 @@ const path = require('path');
 const { repairJsonString } = require('../jsonRepair');
 const { retrieve, formatRagContext } = require('../utils/ragEngine');
 const { runDeepEvalMetricsMock } = require('../utils/evalMetrics');
-const { logTrace } = require('../utils/observability');
+const { logTrace, testLangfuseConnection } = require('../utils/observability');
+const AgenticEngine = require('../utils/agenticEngine');
+
 
 // Import Groq SDK - handle both CommonJS and ESM exports
 let Groq;
@@ -18,7 +20,7 @@ try {
   console.error('Stack:', err.stack);
 }
 
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 app.use(express.json());
@@ -52,36 +54,31 @@ if (!GROQ_API_KEY || GROQ_API_KEY.trim() === '') {
   console.error('Please set GROQ_API_KEY in your environment or .env file');
 }
 
-// Initialize Groq client
 let groq = null;
 try {
   if (!Groq) {
     throw new Error('Groq SDK not loaded - check import above');
   }
   
-  console.log(`[${new Date().toISOString()}] Initializing Groq with API key length: ${GROQ_API_KEY?.length || 0}`);
+  const cleanKey = (GROQ_API_KEY || '').trim();
+  console.log(`[${new Date().toISOString()}] Initializing Groq with API key length: ${cleanKey.length}`);
   
   groq = new Groq({
-    apiKey: GROQ_API_KEY
+    apiKey: cleanKey
   });
   
-  console.log(`[${new Date().toISOString()}] ✅ Groq SDK initialized successfully`);
-  console.log(`[${new Date().toISOString()}] Groq instance type:`, groq.constructor.name);
-  console.log(`[${new Date().toISOString()}] Groq.chat exists:`, !!groq.chat);
-  console.log(`[${new Date().toISOString()}] Groq.chat.completions.create exists:`, typeof groq.chat?.completions?.create);
+  console.log(`[${new Date().toISOString()}] Groq SDK initialized successfully`);
 } catch (err) {
-  console.error(`[${new Date().toISOString()}] ❌ Failed to initialize Groq SDK:`, err.message);
-  console.error(`Error details:`, {
-    name: err.name,
-    message: err.message,
-    stack: err.stack?.split('\n').slice(0, 3)
-  });
+  console.error(`[${new Date().toISOString()}] Failed to initialize Groq SDK:`, err.message);
 }
 
 console.log(`[${new Date().toISOString()}] Server starting...`);
 console.log(`[${new Date().toISOString()}] Model: ${MODEL}`);
 console.log(`[${new Date().toISOString()}] API Key configured: ${!!GROQ_API_KEY}`);
 console.log(`[${new Date().toISOString()}] Groq client ready: ${!!groq}`);
+
+const agenticEngine = groq ? new AgenticEngine(groq, MODEL) : null;
+
 
 // Repair common JSON issues returned by LLM (quotes, trailing commas, unquoted keys, comments, unbalanced braces)
 const validateUserStory = (req, res, next) => {
@@ -129,22 +126,44 @@ const validateTestCase = (req, res, next) => {
   next();
 };
 
-// Calculate health metrics based on evaluation parameters
-function calculateHealthMetrics(parameters) {
-  // Extract individual parameter scores (1-5 scale)
+// Calculate health metrics based on evaluation parameters and optional DeepEval metrics
+function calculateHealthMetrics(parameters, deepEval = null) {
   const scoreMap = {};
-  parameters.forEach(param => {
-    scoreMap[param.name] = param.score;
-  });
+  if (Array.isArray(parameters)) {
+    parameters.forEach(param => {
+      scoreMap[param.name] = param.score;
+    });
+  }
 
   // Convert 1-5 scale to 0-100% scale
   const convertScore = (score) => (score / 5) * 100;
 
-  // Map evaluation criteria to health metrics
-  const faithfulness = convertScore(scoreMap['Requirements Traceability'] || 3);
-  const coverage = convertScore(scoreMap['Coverage'] || 3);
-  const compliance = convertScore(scoreMap['Accuracy'] || 3); // Use accuracy as proxy for compliance
-  const executionRate = convertScore(scoreMap['Completeness'] || 3); // Use completeness as proxy for execution rate
+  // Base metrics from LLM analysis
+  // For User Stories (INVEST): Valuable -> Faithfulness, Small -> Coverage, Independent -> Compliance, Testable -> Execution Rate
+  // For Test Cases: Requirements Traceability -> Faithfulness, Coverage -> Coverage, Accuracy -> Compliance, Completeness -> Execution Rate
+  let faithfulness = convertScore(scoreMap['Requirements Traceability'] || scoreMap['Valuable'] || 3);
+  let coverage = convertScore(scoreMap['Coverage'] || scoreMap['Small'] || 3);
+  let compliance = convertScore(scoreMap['Accuracy'] || scoreMap['Independent'] || 3);
+  let executionRate = convertScore(scoreMap['Completeness'] || scoreMap['Testable'] || 3);
+
+  // If DeepEval is enabled, use its higher-precision metrics to refine the health scores
+  if (deepEval && typeof deepEval === 'object') {
+    // Helper to get case-insensitive key
+    const getVal = (targetKey) => {
+      const key = Object.keys(deepEval).find(k => k.toLowerCase() === targetKey.toLowerCase());
+      return key ? deepEval[key] : null;
+    };
+
+    const dFaithfulness = getVal('Faithfulness');
+    const dRecall = getVal('Contextual Recall');
+    const dCorrectness = getVal('Answer Correctness');
+    const dPrecision = getVal('Contextual Precision');
+
+    if (dFaithfulness) faithfulness = dFaithfulness.score * 100;
+    if (dRecall) coverage = (coverage + (dRecall.score * 100)) / 2;
+    if (dCorrectness) compliance = dCorrectness.score * 100;
+    if (dPrecision) executionRate = (executionRate + (dPrecision.score * 100)) / 2;
+  }
 
   return {
     'Faithfulness': Math.round(faithfulness),
@@ -181,6 +200,7 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
     - Small: It should fit within a single iteration or sprint.
     - Testable: It includes clear acceptance criteria to verify completion.
     For each criterion, justify the score and explain what is missing if the score is less than 5.
+    IMPORTANT: Do NOT include any emojis, icons, or special non-ASCII characters in your findings or recommendations. Use only standard text.
     Return ONLY a JSON object in this format:
     {
       "totalScore": number, // sum of all 6 criteria (max 30)
@@ -200,6 +220,7 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
   try {
     const message = await groq.chat.completions.create({
       model: MODEL,
+      temperature: 0.0,
       response_format: { type: "json_object" },
       max_tokens: 2048,
       messages: [
@@ -232,20 +253,30 @@ app.post('/evaluate', validateUserStory, async (req, res) => {
       result.deepEvalMetric = await runDeepEvalMetricsMock(groq, MODEL, userStory);
     }
     
+    // Calculate health metrics
+    const healthMetrics = calculateHealthMetrics(result.parameters, result.deepEvalMetric);
+    
     // Telemetry: Fire off to Langfuse
     const mappedScores = {};
-    if (result.parameters) {
-      result.parameters.forEach(p => mappedScores[p.name] = (p.score / 5.0));
+    if (result.parameters && Array.isArray(result.parameters)) {
+      result.parameters.forEach(p => mappedScores[p.name] = parseFloat((Number(p.score) / 5.0).toFixed(4)));
     }
-    if (result.deepEvalMetric) {
-      Object.entries(result.deepEvalMetric).forEach(([k, v]) => mappedScores[k] = v.score);
+    if (result.deepEvalMetric && typeof result.deepEvalMetric === 'object') {
+      Object.entries(result.deepEvalMetric).forEach(([k, v]) => {
+        if (v && typeof v === 'object' && v.score !== undefined) {
+          mappedScores[k] = parseFloat(Number(v.score).toFixed(4));
+        }
+      });
     }
-    logTrace("UserStory Evaluation", userStory, result, mappedScores);
+    await logTrace("UserStory Evaluation", userStory, result, mappedScores);
 
     console.log(`[${new Date().toISOString()}] Evaluation complete - Score: ${result.totalScore}`);
-    res.json(result);
+    res.json({
+      ...result,
+      metrics: healthMetrics
+    });
   } catch (error) {
-    console.error(`[${new Date().toISOString()}] ❌ Error in /evaluate:`, error.message);
+    console.error(`[${new Date().toISOString()}]  Error in /evaluate:`, error.message);
     console.error(`[${new Date().toISOString()}] Error stack:`, error.stack);
     
     let errorMessage = 'Failed to evaluate user story. Please try again later.';
@@ -297,6 +328,7 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
       4. Completeness: Are preconditions and postconditions defined?
       5. Coverage: Are negative, edge, and valid scenarios included?
       For each criterion, assign a score from 1 (poor) to 5 (excellent) and provide a brief breakdown. Only assign a score of 5 if ALL aspects are fully met. If any aspect is missing or unclear, reduce the score accordingly. Be critical and realistic in your assessment.
+      IMPORTANT: Do NOT include any emojis, icons, or special non-ASCII characters in your findings or recommendations. Use only standard text.
     Return ONLY a JSON object EXACTLY in this format (no markdown, no commentary):
     {
       "totalScore": number, // sum of the 5 criteria (max 25)
@@ -314,6 +346,7 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
   try {
     const message = await groq.chat.completions.create({
       model: MODEL,
+      temperature: 0.0,
       response_format: { type: "json_object" },
       max_tokens: 2048,
       messages: [
@@ -333,22 +366,26 @@ app.post('/evaluate-test-case', validateTestCase, async (req, res) => {
 
     console.log(`[${new Date().toISOString()}] Test case evaluation complete - Score: ${result.totalScore}`);
     
-    // Calculate health metrics based on the evaluation parameters
-    const healthMetrics = calculateHealthMetrics(result.parameters);
-    
     if (runDeepEval) {
       result.deepEvalMetric = await runDeepEvalMetricsMock(groq, MODEL, testCase);
     }
 
+    // Calculate health metrics based on the evaluation parameters AND DeepEval
+    const healthMetrics = calculateHealthMetrics(result.parameters, result.deepEvalMetric);
+
     // Telemetry: Fire off to Langfuse
     const mappedScores = {};
-    if (result.parameters) {
-      result.parameters.forEach(p => mappedScores[p.name] = (p.score / 5.0));
+    if (result.parameters && Array.isArray(result.parameters)) {
+      result.parameters.forEach(p => mappedScores[p.name] = parseFloat((Number(p.score) / 5.0).toFixed(4)));
     }
-    if (result.deepEvalMetric) {
-      Object.entries(result.deepEvalMetric).forEach(([k, v]) => mappedScores[k] = v.score);
+    if (result.deepEvalMetric && typeof result.deepEvalMetric === 'object') {
+      Object.entries(result.deepEvalMetric).forEach(([k, v]) => {
+        if (v && typeof v === 'object' && v.score !== undefined) {
+          mappedScores[k] = parseFloat(Number(v.score).toFixed(4));
+        }
+      });
     }
-    logTrace("TestCase Evaluation", testCase, result, mappedScores);
+    await logTrace("TestCase Evaluation", testCase, result, mappedScores);
 
     // Add health metrics to the response
     const responseData = {
@@ -376,10 +413,21 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     model: MODEL,
-      response_format: { type: "json_object" },
+    response_format: { type: "json_object" },
     apiKeyConfigured: apiKeyConfigured,
+    langfusePublicKeySet: !!process.env.LANGFUSE_PUBLIC_KEY,
+    langfuseSecretKeySet: !!process.env.LANGFUSE_SECRET_KEY,
+    langfuseBaseUrl: process.env.LANGFUSE_BASE_URL || 'NOT SET (default: https://cloud.langfuse.com)',
     environment: process.env.NODE_ENV || 'development'
   });
+});
+
+// Langfuse connectivity diagnostic endpoint
+app.get('/test-langfuse', async (req, res) => {
+  console.log(`[${new Date().toISOString()}] Testing Langfuse connection...`);
+  const result = await testLangfuseConnection();
+  const statusCode = result.status === 'OK' ? 200 : 500;
+  res.status(statusCode).json(result);
 });
 
 // Test Groq connection endpoint (for debugging)
@@ -430,10 +478,10 @@ app.get('/test-groq', async (req, res) => {
       timestamp: new Date().toISOString()
     };
 
-    console.log(`[${new Date().toISOString()}] ✅ Groq test successful:`, response.message);
+    console.log(`[${new Date().toISOString()}]  Groq test successful:`, response.message);
     res.json(response);
   } catch (error) {
-    console.error(`[${new Date().toISOString()}] ❌ Groq test failed:`, error.message);
+    console.error(`[${new Date().toISOString()}]  Groq test failed:`, error.message);
     console.error(`Error details:`, {
       type: error.type,
       status: error.status,
@@ -475,6 +523,8 @@ FEATURE DESCRIPTION:
 "${feature}"
 ${ragContext}
 
+Ensure you generate at least 3 distinct user stories.
+IMPORTANT: Do NOT include any emojis, icons, or special non-ASCII characters in your descriptions or criteria. Use only standard text.
 CRITICAL: You must respond with ONLY a valid JSON object in the exact structure below. Do not use markdown blocks:
 {
   "summary": "Brief summary of the feature breakdown strategy",
@@ -483,7 +533,16 @@ CRITICAL: You must respond with ONLY a valid JSON object in the exact structure 
       "name": "Short descriptive title",
       "description": "As a [type of user], I want [some goal] so that [some reason]",
       "acceptanceCriteria": ["AC 1", "AC 2"],
-      "storyPoints": 3
+      "storyPoints": 3,
+      "analysis": {
+        "independent": 5,
+        "negotiable": 5,
+        "valuable": 5,
+        "estimable": 5,
+        "small": 5,
+        "testable": 5,
+        "justification": "Short justification for these scores"
+      }
     }
   ]
 }
@@ -510,6 +569,9 @@ Ensure you generate at least 3 distinct user stories. Return ONLY the raw JSON o
       id: ex.id, quality: ex.quality, text: ex.text ? ex.text.substring(0, 200) : "", relevanceScore: ex.score
     }));
 
+    // Telemetry: Fire off to Langfuse
+    await logTrace("UserStory Generation", feature, result);
+
     console.log(`[${new Date().toISOString()}] User story generation complete`);
     res.json(result);
   } catch (error) {
@@ -531,7 +593,7 @@ Ensure you generate at least 3 distinct user stories. Return ONLY the raw JSON o
 
 // Test case generation endpoint
 app.post('/generate-test-cases', async (req, res) => {
-  const { feature } = req.body;
+  const { feature, categories, totalCount } = req.body;
   console.log(`[${new Date().toISOString()}] Generating test cases for feature of ${feature?.length || 0} characters`);
 
   if (!feature || feature.trim().length < 5) {
@@ -541,42 +603,122 @@ app.post('/generate-test-cases', async (req, res) => {
   const ragExamples = await retrieve(feature, "test_case", 3);
   const ragContext = formatRagContext(ragExamples, "test_case");
 
-  const prompt = `You are a professional QA test case generator. Generate comprehensive test cases for this feature:
+  // Category mapping for prompt construction
+  const CATEGORY_MAP = {
+    'Positive':    'Positive Test Cases',
+    'Negative':    'Negative Test Cases',
+    'Edge Case':   'Boundary Value Analysis',
+    'Validation':  'Validation Test Cases',
+    'Security':    'Security Test Cases',
+    'Performance': 'Performance Test Cases',
+    'Boundary':    'Boundary Value Test Cases',
+  };
 
-"${feature}"
-${ragContext}
+  // Use explicit categories/count if provided, else fallback to defaults
+  const selectedCategories = (categories && categories.length > 0)
+    ? categories.map(c => CATEGORY_MAP[c] || c)
+    : ['Positive Test Cases', 'Negative Test Cases', 'Boundary Value Analysis', 'Coverage Analysis'];
 
-CRITICAL: You must respond with ONLY a valid JSON object (no markdown, no explanations, no preamble). The JSON structure must be exactly:
+  // Cap count at 10 as per requirements for Agentic AI precision
+  const requestedCount = (totalCount && Number(totalCount) > 0) ? Math.min(Number(totalCount), 10) : 10;
 
-{
-  "testCases": [
-    {"category": "Positive Test Cases", "cases": [{"name": "", "description": "", "precondition": "", "testData": "", "steps": [], "expectedResult": "", "riskLevel": "Low"}]},
-    {"category": "Negative Test Cases", "cases": []},
-    {"category": "Boundary Value Analysis", "cases": []},
-    {"category": "Coverage Analysis", "cases": []}
-  ],
-  "testData": [{"field": "", "validData": "", "invalidData": "", "expectedBehavior": "", "errorMessage": ""}],
-  "errorHandling": [],
-  "summary": ""
-}
+  // Calculate exact distribution
+  const perType = Math.floor(requestedCount / selectedCategories.length);
+  const remainder = requestedCount % selectedCategories.length;
 
-Generate at least 3 positive test cases and populate ALL categories. Return ONLY the JSON, starting with { and ending with }`;
+  const validCategories = [];
+  selectedCategories.forEach((c, index) => {
+    const cnt = perType + (index < remainder ? 1 : 0);
+    if (cnt > 0) validCategories.push({ category: c, count: cnt });
+  });
+
+  // Build the category slots for the prompt without comments inside the JSON
+  const categorySlots = validCategories.map(vc => {
+    return `{"category": "${vc.category}", "cases": []}`;
+  }).join(',\n      ');
+  
+  const distributionText = validCategories.map(vc => {
+    return `- ${vc.count} cases for ${vc.category}`;
+  }).join('\n  ');
+
+  const categoryList = validCategories.map(vc => vc.category).join(', ');
+
+  const prompt = `You are a professional QA test case generator.
+  
+  FEATURE/ EPIC DESCRIPTION:
+  "${feature}"
+  
+  CONTEXTUAL REFERENCE:
+  ${ragContext}
+  
+  IMPORTANT RULES:
+  - "steps": MUST be a SINGLE STRING where each step starts on a NEW LINE with a number (e.g., "1. Action A\n2. Action B").
+  - NEVER combine multiple steps into a single line.
+  - DO NOT return "steps" as an array; it MUST be a string with explicit \n characters.
+  - Do NOT include any emojis, icons, or special non-ASCII characters in your steps or results. Use only standard text.
+  
+  CRITICAL REQUIREMENT:
+  You MUST generate EXACTLY ${requestedCount} test cases total. No more, no less.
+  You MUST distribute these ${requestedCount} cases exactly into these categories using these EXACT strings for the "category" field:
+  ${distributionText}
+  
+  Do NOT change these strings (e.g., do not change "Positive Test Cases" to "Positive Test Case"). Use them EXACTLY as written.
+  Do NOT create categories that are not in this list.
+  
+  RESPONSE FORMAT (Strict JSON, no markdown):
+  {
+    "testCases": [
+      {"category": "Category Name", "cases": [
+        {
+          "name": "Concise and descriptive name", 
+          "steps": "1. Step one\n2. Step two\n3. Step three", 
+          "expectedResult": "Clear and measurable outcome", 
+          "analysis": {
+             "clarity": 5,
+             "traceability": 5,
+             "coverage": 5,
+             "justification": "Why this score"
+          }
+        }
+      ]}
+    ],
+    "summary": "Summarize the test coverage strategy"
+  }
+  
+  The "riskLevel" field must be one of: "Low", "Medium", or "High".
+  
+  IMPORTANT DATA RULES:
+  - "testData": This must be the actual input data (e.g., 'username: user1, password: pass'). If no specific data is required, output exactly "N/A".
+  - "precondition": The system state required before the test. If none is required, output exactly "N/A".
+  - Make sure the JSON is perfectly formatted. Do not include trailing commas.
+  
+  All ${requestedCount} test cases must be distinct and high-quality. Return ONLY the raw JSON object.
+  ${requestedCount > 10 ? 'Keep descriptions and steps concise since you are generating a large number of cases.' : ''}`;
 
   try {
-    const message = await groq.chat.completions.create({
-      model: MODEL,
-      response_format: { type: "json_object" },
-      max_tokens: 4096,
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ]
-    });
+    const callLLM = async (tokenLimit) => {
+      const message = await groq.chat.completions.create({
+        model: MODEL,
+        response_format: { type: "json_object" },
+        max_tokens: tokenLimit,
+        messages: [{ role: "user", content: prompt }]
+      });
+      return message;
+    };
 
-    const content = message.choices[0].message.content;
+    let message = await callLLM(4000);
+    let content = message.choices[0].message.content;
+    const finishReason = message.choices[0].finish_reason;
     console.log(`[${new Date().toISOString()}] Raw LLM response (first 500 chars): ${content.substring(0, 500)}...`);
+    console.log(`[${new Date().toISOString()}] Finish reason: ${finishReason}, content length: ${content.length}`);
+
+    // If truncated, retry with higher token limit
+    if (finishReason === 'length') {
+      console.log(`[${new Date().toISOString()}] Response was truncated! Retrying with higher token limit...`);
+      message = await callLLM(8000);
+      content = message.choices[0].message.content;
+      console.log(`[${new Date().toISOString()}] Retry response length: ${content.length}, finish_reason: ${message.choices[0].finish_reason}`);
+    }
     
     let repaired;
     try {
@@ -590,9 +732,26 @@ Generate at least 3 positive test cases and populate ALL categories. Return ONLY
     console.log(`[${new Date().toISOString()}] Attempting to parse repaired JSON (length: ${repaired.length})`);
     const result = JSON.parse(repaired);
 
+    // Validate the result has actual test case content
+    if (result.testCases && Array.isArray(result.testCases)) {
+      const totalCases = result.testCases.reduce((sum, cat) => {
+        if (cat.cases && Array.isArray(cat.cases)) return sum + cat.cases.length;
+        if (cat.name || cat.id) return sum + 1; // flat format
+        return sum;
+      }, 0);
+      console.log(`[${new Date().toISOString()}] Validated: ${totalCases} test cases found in response`);
+      
+      if (totalCases === 0) {
+        throw new Error('AI generated empty test cases. This usually happens due to token limits. Please try with fewer categories.');
+      }
+    }
+
     result.ragContext = ragExamples.map(ex => ({
       id: ex.id, quality: ex.quality, text: ex.text ? ex.text.substring(0, 200) : "", relevanceScore: ex.score
     }));
+
+    // Telemetry: Fire off to Langfuse
+    await logTrace("TestCase Generation", feature, result);
 
     console.log(`[${new Date().toISOString()}] Test case generation complete`);
     res.json(result);
@@ -602,12 +761,16 @@ Generate at least 3 positive test cases and populate ALL categories. Return ONLY
       console.error(error.stack);
     }
     let errorMessage = 'Failed to generate test cases. Please try again later.';
-    if (error.message.includes('API key')) {
-      errorMessage = 'Groq API key is not configured. Please set GROQ_API_KEY environment variable.';
-    } else if (error.message.includes('No JSON found')) {
-      errorMessage = `${error.message}. The model may not be returning valid JSON.`;
-    } else if (error.message.includes('Unexpected token')) {
-      errorMessage = 'Invalid JSON format returned from AI model. Try again.';
+    if (error.message) {
+      if (error.message.includes('API key')) {
+        errorMessage = 'Groq API key is not configured. Please set GROQ_API_KEY environment variable.';
+      } else if (error.message.includes('No JSON found')) {
+        errorMessage = `${error.message}. The model may not be returning valid JSON.`;
+      } else if (error.message.includes('Unexpected token')) {
+        errorMessage = 'Invalid JSON format returned from AI model. Try again.';
+      } else {
+        errorMessage = `Generation failed: ${error.message}`;
+      }
     }
     
     res.status(500).json({ 
@@ -681,6 +844,10 @@ Generate 5-8 test cases covering various scenarios based on the mockup descripti
     }
 
     console.log(`[${new Date().toISOString()}] Successfully generated ${result.testCases.length} test cases from image description`);
+    
+    // Telemetry: Fire off to Langfuse
+    await logTrace("TestCase Generation from Image", description, result);
+    
     res.json(result);
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error in /generate-test-cases-from-image:`, error.message);
@@ -872,14 +1039,70 @@ app.post('/integration/azure/work-items', async (req, res) => {
     }
 
     // Transform the work items - Azure returns minimal data in WIQL, we need to fetch details
-    const workItems = (response.data.workItems || []).slice(0, 50).map(item => ({
+    const ids = (response.data.workItems || []).slice(0, 50).map(item => item.id);
+    
+    if (ids.length === 0) {
+      return res.json({ workItems: [] });
+    }
+
+    // Fetch details for the work items
+    const detailsOptions = {
+      hostname: 'dev.azure.com',
+      port: 443,
+      path: `/${organization}/${project}/_apis/wit/workitems?ids=${ids.join(',')}&fields=System.Id,System.Title,System.Description,System.State&api-version=7.0`,
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Accept': 'application/json'
+      }
+    };
+
+    const detailsResponse = await new Promise((resolve, reject) => {
+      const req = https.request(detailsOptions, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode, data: JSON.parse(data) });
+          } catch (e) {
+            reject(new Error(`Failed to parse details response: ${e.message}`));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    if (detailsResponse.status !== 200) {
+      console.error(`[${new Date().toISOString()}] Azure details error (${detailsResponse.status}):`, detailsResponse.data);
+      return res.status(detailsResponse.status).json({ 
+        error: detailsResponse.data.message || `Azure Details API returned status ${detailsResponse.status}`
+      });
+    }
+
+    // Helper to strip HTML
+    const stripHtml = (html) => {
+      if (!html) return '';
+      return html
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<p>/gi, '')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<[^>]*>?/gm, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .trim();
+    };
+
+    const workItems = (detailsResponse.data.value || []).map(item => ({
       id: item.id,
       title: item.fields?.['System.Title'] || 'Untitled',
-      description: item.fields?.['System.Description'] || 'No description',
+      description: stripHtml(item.fields?.['System.Description']) || 'No description',
       status: item.fields?.['System.State'] || 'Unknown'
     }));
 
-    console.log(`[${new Date().toISOString()}] Successfully fetched ${workItems.length} work items from Azure DevOps`);
+    console.log(`[${new Date().toISOString()}] Successfully fetched details for ${workItems.length} work items from Azure DevOps`);
     res.json({ workItems });
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Azure error:`, error.message);
@@ -898,6 +1121,45 @@ app.get('/health', (req, res) => {
   });
 });
 
+// --- AGENTIC ENDPOINTS ---
+
+app.post('/agentic/refine', async (req, res) => {
+  const { artifact, type, findings, grade } = req.body;
+  if (!agenticEngine) return res.status(503).json({ error: 'Agentic Engine not ready' });
+  
+  try {
+    const result = await agenticEngine.refineArtifact(artifact, type, findings, grade);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/agentic/multi-agent-eval', async (req, res) => {
+  const { artifact, type } = req.body;
+  if (!agenticEngine) return res.status(503).json({ error: 'Agentic Engine not ready' });
+  
+  try {
+    const result = await agenticEngine.multiAgentReview(artifact, type);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/agentic/chat', async (req, res) => {
+  const { artifact, type, evaluation, userQuestion } = req.body;
+  if (!agenticEngine) return res.status(503).json({ error: 'Agentic Engine not ready' });
+  
+  try {
+    const result = await agenticEngine.chatResponse(artifact, type, evaluation, userQuestion);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: `Endpoint ${req.url} not found` });
@@ -905,9 +1167,9 @@ app.use((req, res) => {
 
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
-    console.log(`\n🚀 Backend running on http://localhost:${PORT}`);
-    console.log(`📊 Using model: ${MODEL}`);
-    console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}\n`);
+    console.log(`\nBackend running on http://localhost:${PORT}`);
+    console.log(`Using model: ${MODEL}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}\n`);
   });
 }
 

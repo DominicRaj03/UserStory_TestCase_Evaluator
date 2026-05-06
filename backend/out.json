@@ -1,0 +1,1 @@
+{"success":false,"error":"Connection error.","type":"Error","status":500,"hasApiKey":true,"apiKeyLength":58,"model":"llama-3.1-8b-instant","response_format":{"type":"json_object"},"failedAt":"groq.chat.completions.create"}

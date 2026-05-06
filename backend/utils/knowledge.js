@@ -11,7 +11,7 @@ const USER_STORIES = [
         "type": "user_story",
         "quality": "good",
         "text": "As a shopper, I want to filter products by category and price range so that I can quickly find items within my budget.",
-        "explanation": "Good: Valuable and testable but slightly less independent — depends on product listing existing. Estimable but requires UI work.",
+        "explanation": "Good: Valuable and testable but slightly less independent  depends on product listing existing. Estimable but requires UI work.",
     },
     {
         "id": "us_004",
