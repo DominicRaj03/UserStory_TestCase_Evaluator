@@ -227,25 +227,31 @@ const TestCaseEvaluator = ({ setServerBusy, initialValue }) => {
             {!collapsed.agentic && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
                 <div>
-                  {(results.totalScore < 23 || (results.metrics && (results.metrics.faithfulness < 90 || results.metrics.coverage < 90))) ? (
-                    <RefinementPanel 
-                      original={testCase} 
-                      type="test_case" 
-                      findings={results.parameters.map(p => p.findings).join(' ')} 
-                      grade={results.totalScore >= 20 ? "B" : results.totalScore >= 15 ? "C" : "D"} 
-                      onApply={(refined) => { setTestCase(refined); setResults(null); }}
-                    />
-                  ) : (
-                    <div style={{ marginTop: 24, padding: 20, background: '#f0fdf4', borderRadius: 16, border: '1px solid #86efac', display: 'flex', alignItems: 'center', gap: 12 }}>
-                       <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6 9 17l-5-5"/></svg>
-                       </div>
-                       <div>
-                         <p style={{ margin: 0, fontWeight: 800, color: '#1e40af', fontSize: '0.9rem' }}>Excellent Test Coverage</p>
-                         <p style={{ margin: 0, fontSize: '0.78rem', color: '#1e3a8a' }}>This test case demonstrates superior clarity and traceability. No further autonomous refinement needed.</p>
-                       </div>
-                    </div>
-                  )}
+                  {(() => {
+                    const fallbackScore = results.parameters?.reduce((sum, p) => sum + (Number(p.score) || 0), 0) || 0;
+                    const finalScore = results.totalScore || fallbackScore;
+                    const needsRefinement = finalScore < 23 || (results.metrics && (results.metrics.faithfulness < 90 || results.metrics.coverage < 90));
+                    
+                    return needsRefinement ? (
+                      <RefinementPanel 
+                        original={testCase} 
+                        type="test_case" 
+                        findings={results.parameters.map(p => p.findings).join(' ')} 
+                        grade={finalScore >= 20 ? "B" : finalScore >= 15 ? "C" : "D"} 
+                        onApply={(refined) => { setTestCase(refined); setResults(null); }}
+                      />
+                    ) : (
+                      <div style={{ marginTop: 24, padding: 20, background: '#f0fdf4', borderRadius: 16, border: '1px solid #86efac', display: 'flex', alignItems: 'center', gap: 12 }}>
+                         <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6 9 17l-5-5"/></svg>
+                         </div>
+                         <div>
+                           <p style={{ margin: 0, fontWeight: 800, color: '#1e40af', fontSize: '0.9rem' }}>Exceptional Test Coverage Verified</p>
+                           <p style={{ margin: 0, fontSize: '0.78rem', color: '#1e3a8a' }}>This test case demonstrates superior clarity and traceability. No further autonomous refinement needed.</p>
+                         </div>
+                      </div>
+                    );
+                  })()}
                   <MultiAgentDashboard artifact={testCase} type="test_case" />
                 </div>
                 <AgentChat artifact={testCase} type="test_case" evaluation={results} />
