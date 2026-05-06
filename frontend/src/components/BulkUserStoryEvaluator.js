@@ -22,7 +22,6 @@ function BulkUserStoryEvaluator({ setServerBusy, onAnalyze }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [validationError, setValidationError] = useState(null);
   const [runDeepEval, setRunDeepEval] = useState(false);
-  const itemsPerPage = 5;
 
   const validateExcel = (data) => {
     if (!data?.length) return 'Excel file is empty';
@@ -121,7 +120,7 @@ function BulkUserStoryEvaluator({ setServerBusy, onAnalyze }) {
     if (setServerBusy) setServerBusy(false);
   };
 
-  const itemsPerPage = 5;
+  const itemsPerPage = ITEMS_PER_PAGE;
   const totalPages = Math.ceil((results || []).length / itemsPerPage);
   const paginatedResults = (results || []).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -263,9 +262,10 @@ function BulkUserStoryEvaluator({ setServerBusy, onAnalyze }) {
                             fontSize: '0.75rem', 
                             color: '#475569', 
                             margin: '14px 0 0 0',
-                            lineHeight: 1.5
+                            lineHeight: 1.5,
+                            whiteSpace: 'pre-wrap'
                           }}>
-                            <strong style={{ color: '#1e293b', fontSize: '0.65rem', textTransform: 'uppercase', marginRight: 6 }}>Detailed Analysis:</strong>
+                            <strong style={{ color: '#1e293b', fontSize: '0.65rem', textTransform: 'uppercase', marginRight: 6, display: 'block', marginBottom: 4 }}>Detailed Analysis:</strong>
                             {r.investOverview || r.recommendations?.[0] || "This story is well-defined and meets standard INVEST quality benchmarks for development readiness."}
                           </p>
                         </div>
