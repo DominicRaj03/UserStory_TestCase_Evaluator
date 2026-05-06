@@ -223,8 +223,8 @@ function BulkTestCaseEvaluator({ setServerBusy, onAnalyze }) {
                     }}>
                       <p style={{ fontSize: '0.65rem', fontWeight: 900, color: '#0d9488', textTransform: 'uppercase', marginBottom: 12, letterSpacing: '0.05em' }}>TC ANALYSIS</p>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
-                        {['Clarity', 'Traceability', 'Accuracy', 'Completeness', 'Coverage'].map((name, idx) => {
-                          const param = r.parameters?.[idx];
+                        {['Clarity', 'Requirements Traceability', 'Accuracy', 'Completeness', 'Coverage'].map((name) => {
+                          const param = r.parameters?.find(p => p.name === name || p.name.includes(name.split(' ')[0]));
                           const score = param?.score || 0;
                           return (
                             <div key={name} style={{ 
@@ -232,10 +232,12 @@ function BulkTestCaseEvaluator({ setServerBusy, onAnalyze }) {
                               padding: '8px', 
                               background: '#f0fdfa', 
                               borderRadius: 10,
-                              border: `1px solid ${score === 5 ? '#10b98140' : '#ccfbf1'}`
+                              border: `1px solid ${score >= 4 ? '#10b98140' : '#ccfbf1'}`
                             }}>
-                              <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#5eead4', marginBottom: 2 }}>{name.charAt(0)}</div>
-                              <div style={{ fontSize: '0.9rem', fontWeight: 950, color: score === 5 ? '#10b981' : '#0d9488' }}>{score}</div>
+                              <div style={{ fontSize: '0.55rem', fontWeight: 900, color: '#5eead4', marginBottom: 4, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {name.replace('Requirements ', '')}
+                              </div>
+                              <div style={{ fontSize: '0.9rem', fontWeight: 950, color: score >= 4 ? '#10b981' : '#0d9488' }}>{score}/5</div>
                             </div>
                           );
                         })}

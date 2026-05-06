@@ -178,7 +178,10 @@ const App = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ width: 3, height: 20, background: '#6366f1', borderRadius: 4 }} />
             <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#1a1a2e', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {activeLabel} <span style={{ color: '#94a3b8', fontWeight: 500, marginLeft: 4 }}>EVALUATOR</span>
+              {activeLabel} 
+              <span style={{ color: '#94a3b8', fontWeight: 500, marginLeft: 4 }}>
+                {activeTab.includes('-gen') ? 'GENERATOR' : activeTab.includes('bulk-') ? 'UPLOAD' : 'EVALUATOR'}
+              </span>
             </h2>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
