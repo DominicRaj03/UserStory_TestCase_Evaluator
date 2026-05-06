@@ -135,41 +135,27 @@ function calculateHealthMetrics(parameters, deepEval = null) {
     });
   }
 
-  // Convert 1-5 scale to 0-100% scale
-  const convertScore = (score) => (score / 5) * 100;
-
-  // Base metrics from LLM analysis
-  // For User Stories (INVEST): Valuable -> Faithfulness, Small -> Coverage, Independent -> Compliance, Testable -> Execution Rate
-  // For Test Cases: Requirements Traceability -> Faithfulness, Coverage -> Coverage, Accuracy -> Compliance, Completeness -> Execution Rate
-  let faithfulness = convertScore(scoreMap['Requirements Traceability'] || scoreMap['Valuable'] || 3);
-  let coverage = convertScore(scoreMap['Coverage'] || scoreMap['Small'] || 3);
-  let compliance = convertScore(scoreMap['Accuracy'] || scoreMap['Independent'] || 3);
-  let executionRate = convertScore(scoreMap['Completeness'] || scoreMap['Testable'] || 3);
-
-  // If DeepEval is enabled, use its higher-precision metrics to refine the health scores
-  if (deepEval && typeof deepEval === 'object') {
-    // Helper to get case-insensitive key
-    const getVal = (targetKey) => {
-      const key = Object.keys(deepEval).find(k => k.toLowerCase() === targetKey.toLowerCase());
-      return key ? deepEval[key] : null;
-    };
-
-    const dFaithfulness = getVal('Faithfulness');
-    const dRecall = getVal('Contextual Recall');
-    const dCorrectness = getVal('Answer Correctness');
-    const dPrecision = getVal('Contextual Precision');
-
-    if (dFaithfulness) faithfulness = dFaithfulness.score * 100;
-    if (dRecall) coverage = (coverage + (dRecall.score * 100)) / 2;
-    if (dCorrectness) compliance = dCorrectness.score * 100;
-    if (dPrecision) executionRate = (executionRate + (dPrecision.score * 100)) / 2;
+  // If DeepEval is NOT enabled, do not return estimated metrics. 
+  // Returning derived metrics causes UI confusion when the user toggles the DeepEval checkbox.
+  if (!deepEval || typeof deepEval !== 'object') {
+    return null;
   }
+  // Helper to get case-insensitive key
+  const getVal = (targetKey) => {
+    const key = Object.keys(deepEval).find(k => k.toLowerCase() === targetKey.toLowerCase());
+    return key ? deepEval[key] : null;
+  };
+
+  const dFaithfulness = getVal('Faithfulness');
+  const dRecall = getVal('Contextual Recall');
+  const dCorrectness = getVal('Answer Correctness');
+  const dPrecision = getVal('Contextual Precision');
 
   return {
-    'Faithfulness': Math.round(faithfulness),
-    'Coverage': Math.round(coverage),
-    'Compliance': Math.round(compliance),
-    'Execution Rate': Math.round(executionRate)
+    'Faithfulness': dFaithfulness ? Math.round(dFaithfulness.score * 100) : 0,
+    'Coverage': dRecall ? Math.round(dRecall.score * 100) : 0,
+    'Compliance': dCorrectness ? Math.round(dCorrectness.score * 100) : 0,
+    'Execution Rate': dPrecision ? Math.round(dPrecision.score * 100) : 0
   };
 }
 
